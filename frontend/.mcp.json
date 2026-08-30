@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "jetro": {
+      "type": "stdio",
+      "command": "C:\\Users\\PARADIGM MULTIMEDIA\\.jetro\\runtime\\node-win32-x64.exe",
+      "args": [
+        "C:\\Users\\PARADIGM MULTIMEDIA\\.jetro\\mcp-server\\index.js"
+      ],
+      "env": {
+        "JET_WORKSPACE": "c:\\Users\\PARADIGM MULTIMEDIA\\Downloads\\frontend",
+        "JET_API_URL": "https://api.jetro.ai",
+        "PATH": "C:\\Users\\PARADIGM MULTIMEDIA\\.jetro\\runtime;C:\\Program Files (x86)\\VMware\\VMware Workstation\\bin\\;C:\\Windows\\system32;C:\\Windows;C:\\Windows\\System32\\Wbem;C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\;C:\\Windows\\System32\\OpenSSH\\;C:\\Program Files\\nodejs\\;C:\\Program Files\\dotnet\\;C:\\Program Files\\Git\\cmd;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Programs\\Python\\Python314\\Scripts\\;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Programs\\Python\\Python314\\;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Programs\\Python\\Python311\\;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Microsoft\\WindowsApps;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Programs\\Microsoft VS Code\\bin;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Roaming\\npm;C:\\Users\\PARADIGM MULTIMEDIA\\.dotnet\\tools;C:\\Users\\PARADIGM MULTIMEDIA\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin"
+      }
+    }
+  }
+}
