@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+/*
+  Brand theme tokens for skillbridge.
+  Matches corrected_design.pdf exactly — ink navy for trust/structure,
+  brass for anything earned or guaranteed, paper for the page background.
+  Use as: bg-ink, text-brass, bg-paper, border-line, text-slate, bg-success, etc.
+*/
+@theme {
+  --color-ink: #16222C;
+  --color-ink-700: #24333F;
+  --color-ink-600: #34454F;
+
+  --color-paper: #F5F2EA;
+  --color-surface: #FFFFFF;
+
+  --color-brass: #C9932E;
+  --color-brass-dark: #7A5619;
+  --color-brass-light: #F3E3C2;
+
+  --color-slate: #5B6B74;
+  --color-line: #E1DCCF;
+
+  --color-success: #3F7D58;
+  --color-success-bg: #E4EFE7;
+
+  --color-warn: #A85A1F;
+  --color-warn-bg: #F6E3CE;
+
+  --color-danger: #B23B3B;
+  --color-danger-bg: #F5E1E1;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
