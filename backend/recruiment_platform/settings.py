@@ -100,7 +100,13 @@ DATABASES = {
     }
 }
 
-# AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = 'accounts.User'
+
+# auth.E003: email uniqueness is enforced by a conditional UniqueConstraint
+# (accounts.User.Meta, 'unique_active_email') scoped to non-soft-deleted rows,
+# so a deleted user's email can be reused. Django's check can't see conditional
+# constraints, so it's silenced here rather than making the field unconditionally unique.
+SILENCED_SYSTEM_CHECKS = ['auth.E003']
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators
 

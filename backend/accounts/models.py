@@ -33,7 +33,7 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     company = models.ForeignKey(
-        'companies.Company', null=True, blank=True,
+        'company.Company', null=True, blank=True,
         on_delete=models.PROTECT, related_name='users'
     )
     role = models.CharField(max_length=20, choices=UserRole.choices)
@@ -59,7 +59,7 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
                 name='unique_active_email'
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     Q(role__in=['company_admin', 'recruiter'], company__isnull=False)
                     | Q(role__in=['candidate', 'platform_admin'], company__isnull=True)
                 ),
@@ -69,3 +69,4 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
 
     def __str__(self):
         return self.email
+    
