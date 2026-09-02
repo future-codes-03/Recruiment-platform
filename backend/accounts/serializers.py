@@ -1,11 +1,6 @@
-import secrets
-from datetime import timedelta
-
-from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -16,7 +11,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from company.models import Company
 
-from .models import OtpToken, User, UserRole
+from .models import User, UserRole
 
 # Free consumer email providers rejected on company signup — an admin_email
 # must belong to the company's own domain.
@@ -49,28 +44,42 @@ def get_user_from_reset_token(reset_token):
     return user
 
 
-# Shared by both candidate and company signup (called by the view after
-# create_user(), not by the signup serializers themselves) and by
-# VerifyOtpSerializer below.
-OTP_LENGTH = 6
-OTP_TTL_MINUTES = 10
+# Stateless email-verification tokens, same pattern as the reset token
+# above but salted separately so a reset token and a verification token
+# are never interchangeable.
+class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
+    key_salt = 'accounts.EmailVerificationTokenGenerator'
+
+    def _make_hash_value(self, user, timestamp):
+        # Folds in email_verified_at (unlike the base password-reset hash,
+        # which only tracks password + last_login) so the token stops
+        # validating the moment it's used — same self-invalidating
+        # property as the reset token, without a table.
+        return f'{super()._make_hash_value(user, timestamp)}{user.email_verified_at}'
 
 
-def generate_email_otp(user):
-    """Issue a fresh OTP for the user, invalidating any still-unconsumed one
-    so only the most recently sent code is ever valid."""
-    OtpToken.objects.filter(user=user, consumed_at__isnull=True).delete()
-    code = f'{secrets.randbelow(10 ** OTP_LENGTH):0{OTP_LENGTH}d}'
-    OtpToken.objects.create(
-        user=user,
-        code_hash=make_password(code),
-        expires_at=timezone.now() + timedelta(minutes=OTP_TTL_MINUTES),
-    )
-    return code
+email_verification_token_generator = EmailVerificationTokenGenerator()
+
+
+def make_email_verification_token(user):
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = email_verification_token_generator.make_token(user)
+    return f'{uid}.{token}'
+
+
+def get_user_from_verification_token(token):
+    try:
+        uid_b64, raw_token = token.split('.', 1)
+        user = User.objects.get(pk=force_str(urlsafe_base64_decode(uid_b64)))
+    except (ValueError, TypeError, User.DoesNotExist):
+        return None
+    if not email_verification_token_generator.check_token(user, raw_token):
+        return None
+    return user
 
 
 class UserSerializer(serializers.ModelSerializer):
-    company_id = serializers.UUIDField(source='company_id', read_only=True, allow_null=True)
+    company_id = serializers.UUIDField(read_only=True, allow_null=True)
 
     class Meta:
         model = User
@@ -99,7 +108,7 @@ class CandidateSignupSerializer(serializers.Serializer):
 
     def validate_password(self, value):
         try:
-            validate_password(value)
+            validate_password(value) #checks whether a password meets your project's password-validation rules.
         except DjangoValidationError as exc:
             raise serializers.ValidationError(list(exc.messages))
         return value
@@ -153,41 +162,41 @@ class CompanySignupSerializer(serializers.Serializer):
         return {'company': company, 'user': user}
 
 
-class VerifyOtpSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    code = serializers.CharField(min_length=OTP_LENGTH, max_length=OTP_LENGTH)
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField()
 
     default_error_messages = {
-        'invalid_code': 'This code is invalid or has expired.',
+        'invalid_token': 'This verification link is invalid, expired, or has already been used.',
     }
 
-    def validate(self, attrs):
-        email = attrs['email'].strip().lower()
-        user = User.objects.filter(email__iexact=email).first()
-
-        token = None
-        if user is not None:
-            token = (
-                OtpToken.objects
-                .filter(user=user, consumed_at__isnull=True, expires_at__gt=timezone.now())
-                .order_by('-created_at')
-                .first()
-            )
-
-        if token is None or not check_password(attrs['code'], token.code_hash):
-            raise serializers.ValidationError(self.error_messages['invalid_code'])
-
+    def validate_token(self, value):
+        user = get_user_from_verification_token(value)
+        if user is None:
+            raise serializers.ValidationError(self.error_messages['invalid_token'])
         self._user = user
-        self._token = token
-        return attrs
+        return value
 
     def save(self, **kwargs):
-        with transaction.atomic():
-            self._token.consumed_at = timezone.now()
-            self._token.save(update_fields=['consumed_at'])
-            self._user.email_verified_at = timezone.now()
-            self._user.save(update_fields=['email_verified_at'])
+        self._user.email_verified_at = timezone.now()
+        self._user.save(update_fields=['email_verified_at'])
         return self._user
+
+
+class ResendVerificationSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def get_user(self):
+        # "No such account" and "already verified" must be indistinguishable
+        # to the caller, so both collapse into the same None result here
+        # rather than being raised as separate errors.
+        return (
+            User.objects
+            .filter(email__iexact=self.validated_data['email'], email_verified_at__isnull=True)
+            .first()
+        )
 
 
 class LoginSerializer(serializers.Serializer):
@@ -203,7 +212,7 @@ class LoginSerializer(serializers.Serializer):
         user = User.objects.filter(email__iexact=email).first()
 
         # Never reveal whether the email exists — same error either way.
-        if user is None or not user.check_password(attrs['password']) or not user.is_active:
+        if user is None or not user.check_password(attrs['password']) or not user.is_active or user.email_verified_at is None:
             raise serializers.ValidationError(self.error_messages['invalid_credentials'])
 
         refresh = RefreshToken.for_user(user)

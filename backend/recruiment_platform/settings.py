@@ -146,9 +146,10 @@ STATIC_URL = 'static/'
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
+# Console backend for now — no real SMTP credentials yet, so outgoing mail
+# (verification links, password reset links) just prints to stdout.
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@skillbridge.local')
+
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')

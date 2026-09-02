@@ -69,24 +69,3 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
 
     def __str__(self):
         return self.email
-
-
-class OtpToken(BaseModel):
-    """
-    A short-lived 6-digit code issued for email verification. Stored as a
-    hash (not plaintext) — a raw DB read shouldn't hand over a still-valid
-    code. Not self-invalidating like the password-reset token, since a
-    6-digit code can't encode enough state to detect reuse on its own.
-    """
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name='otp_tokens'
-    )
-    code_hash = models.CharField(max_length=255)
-    expires_at = models.DateTimeField()
-    consumed_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        db_table = 'otp_tokens'
-
-    def __str__(self):
-        return f'OTP for {self.user_id}'
