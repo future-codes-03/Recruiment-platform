@@ -129,7 +129,7 @@ celerybeat-schedule
 celerybeat.pid
 
 # SageMath parsed files
-claude.md
+CLAUDE.md
 *.sage.py
 docs/
 # Environments

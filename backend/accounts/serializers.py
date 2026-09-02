@@ -1,6 +1,12 @@
+import secrets
+from datetime import timedelta
+
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
@@ -10,7 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from company.models import Company
 
-from .models import User, UserRole
+from .models import OtpToken, User, UserRole
 
 # Free consumer email providers rejected on company signup — an admin_email
 # must belong to the company's own domain.
@@ -41,6 +47,26 @@ def get_user_from_reset_token(reset_token):
     if not password_reset_token_generator.check_token(user, token):
         return None
     return user
+
+
+# Shared by both candidate and company signup (called by the view after
+# create_user(), not by the signup serializers themselves) and by
+# VerifyOtpSerializer below.
+OTP_LENGTH = 6
+OTP_TTL_MINUTES = 10
+
+
+def generate_email_otp(user):
+    """Issue a fresh OTP for the user, invalidating any still-unconsumed one
+    so only the most recently sent code is ever valid."""
+    OtpToken.objects.filter(user=user, consumed_at__isnull=True).delete()
+    code = f'{secrets.randbelow(10 ** OTP_LENGTH):0{OTP_LENGTH}d}'
+    OtpToken.objects.create(
+        user=user,
+        code_hash=make_password(code),
+        expires_at=timezone.now() + timedelta(minutes=OTP_TTL_MINUTES),
+    )
+    return code
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -125,6 +151,43 @@ class CompanySignupSerializer(serializers.Serializer):
             company=company,
         )
         return {'company': company, 'user': user}
+
+
+class VerifyOtpSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    code = serializers.CharField(min_length=OTP_LENGTH, max_length=OTP_LENGTH)
+
+    default_error_messages = {
+        'invalid_code': 'This code is invalid or has expired.',
+    }
+
+    def validate(self, attrs):
+        email = attrs['email'].strip().lower()
+        user = User.objects.filter(email__iexact=email).first()
+
+        token = None
+        if user is not None:
+            token = (
+                OtpToken.objects
+                .filter(user=user, consumed_at__isnull=True, expires_at__gt=timezone.now())
+                .order_by('-created_at')
+                .first()
+            )
+
+        if token is None or not check_password(attrs['code'], token.code_hash):
+            raise serializers.ValidationError(self.error_messages['invalid_code'])
+
+        self._user = user
+        self._token = token
+        return attrs
+
+    def save(self, **kwargs):
+        with transaction.atomic():
+            self._token.consumed_at = timezone.now()
+            self._token.save(update_fields=['consumed_at'])
+            self._user.email_verified_at = timezone.now()
+            self._user.save(update_fields=['email_verified_at'])
+        return self._user
 
 
 class LoginSerializer(serializers.Serializer):
