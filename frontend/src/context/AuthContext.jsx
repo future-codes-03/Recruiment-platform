@@ -4,6 +4,7 @@ import { login as loginApi } from "../api/auth";
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = "skillbridge_access_token";
+const REFRESH_KEY = "skillbridge_refresh_token";
 const USER_KEY = "skillbridge_user";
 
 export function AuthProvider({ children }) {
@@ -11,16 +12,24 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // On first load, restore the session from localStorage so a refresh
-  // doesn't log the user out.
+  // doesn't log the user out. Guarded: corrupted or hand-edited localStorage
+  // used to crash the whole app white-screen on load.
   useEffect(() => {
-    const savedUser = localStorage.getItem(USER_KEY);
-    if (savedUser) setUser(JSON.parse(savedUser));
-    setLoading(false);
+    try {
+      const savedUser = localStorage.getItem(USER_KEY);
+      if (savedUser) setUser(JSON.parse(savedUser));
+    } catch {
+      localStorage.removeItem(USER_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   async function login(email, password) {
     const data = await loginApi({ email, password });
     localStorage.setItem(TOKEN_KEY, data.access_token);
+    localStorage.setItem(REFRESH_KEY, data.refresh_token);
     localStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setUser(data.user);
     return data.user;
@@ -28,6 +37,7 @@ export function AuthProvider({ children }) {
 
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
     setUser(null);
   }

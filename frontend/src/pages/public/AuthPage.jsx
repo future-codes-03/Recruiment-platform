@@ -1,19 +1,55 @@
-import { useState } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { useAuth } from "../../context/AuthContext";
-import { signupCandidate } from "../../api/auth";
+import { signupCandidate, signupCompany } from "../../api/auth";
+import { getErrorMessage } from "../../api/errors";
 import Button from "../../components/shared/Button";
 
-export default function AuthPage() {
-  const [searchParams] = useSearchParams();
-  const [role, setRole] = useState(searchParams.get("as") === "employer" ? "employer" : "candidate");
-  const [mode, setMode] = useState("login"); // "login" | "signup"
-  const [error, setError] = useState("");
-  const { login } = useAuth();
-  const navigate = useNavigate();
+// Basic RFC-5322-ish check — good enough to catch typos, not meant to be
+// exhaustive (the backend is the real source of truth on validity).
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Pakistani mobile: 03XXXXXXXXX — 11 digits, starts with 03. Strips spaces
+// and dashes before testing so "0300-1234567" and "03001234567" both pass.
+const PHONE_PATTERN = /^03\d{9}$/;
+const NOT_BLANK = (v) => v.trim().length > 0 || "This can't be just whitespace";
+const VALID_ROLES = ["candidate", "employer"];
 
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm();
+export default function AuthPage() {
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const [error, setError] = useState("");
+
+  // mode and role both live in the URL, not local state — that's what makes
+  // the toggle buttons and the URL agree, and what makes the buttons survive
+  // a page refresh or a shared link.
+  const mode = location.pathname === "/signup" ? "signup" : "login";
+  const rawAs = searchParams.get("as");
+  const role = rawAs === "employer" ? "employer" : "candidate";
+
+  // A junk value like ?as=candidatee shouldn't 404 (the page itself is
+  // valid) but it also shouldn't sit in the address bar disagreeing with
+  // what's on screen — silently defaulting to "candidate" while the URL
+  // still says "candidatee" is the same address-bar/screen mismatch as the
+  // routing bug, just one level down. Rewrite it to the value actually in
+  // use. No-op when ?as= is absent entirely — that's a normal, valid URL.
+  useEffect(() => {
+    if (rawAs !== null && !VALID_ROLES.includes(rawAs)) {
+      setSearchParams({ as: "candidate" }, { replace: true });
+    }
+  }, [rawAs, setSearchParams]);
+
+  function setRole(nextRole) {
+    setSearchParams({ as: nextRole }, { replace: true });
+  }
+
+  function setMode(nextMode) {
+    navigate(`/${nextMode}?as=${role}`);
+  }
+
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm();
 
   async function onSubmit(values) {
     setError("");
@@ -21,19 +57,32 @@ export default function AuthPage() {
       if (mode === "login") {
         const user = await login(values.email, values.password);
         navigate(user.role === "candidate" ? "/dashboard" : "/employer/dashboard");
-      } else {
-        // Candidate self-signup goes straight through; employer signup is a
-        // separate multi-step onboarding flow (company name, industry, etc.)
-        // built as its own page — this form only covers the candidate path.
+        return;
+      }
+
+      if (role === "candidate") {
         await signupCandidate({
           email: values.email,
           password: values.password,
-          full_name: values.email.split("@")[0], // placeholder until onboarding collects the real name
+          full_name: values.full_name,
+          phone: values.phone,
         });
-        navigate("/verify-email");
+        navigate(`/verify-email?email=${encodeURIComponent(values.email)}`);
+      } else {
+        // This covers only the company + admin-account fields signupCompany
+        // needs. Extra company detail (industry, size, etc.) belongs in a
+        // later employer onboarding step, same way candidate profile detail
+        // beyond name/phone belongs in candidate onboarding, not here.
+        await signupCompany({
+          company_name: values.company_name,
+          admin_full_name: values.full_name,
+          admin_email: values.email,
+          admin_password: values.password,
+        });
+        navigate(`/verify-email?email=${encodeURIComponent(values.email)}`);
       }
     } catch (err) {
-      setError(err.response?.data?.message || "Something went wrong. Please try again.");
+      setError(getErrorMessage(err));
     }
   }
 
@@ -46,6 +95,7 @@ export default function AuthPage() {
       <main className="max-w-sm mx-auto px-6 py-10">
         <div className="flex justify-center gap-2 mb-6">
           <button
+            type="button"
             onClick={() => setRole("candidate")}
             className={`px-4 py-2 rounded-full text-sm font-medium border ${
               role === "candidate" ? "bg-ink text-white border-ink" : "border-line text-slate"
@@ -54,6 +104,7 @@ export default function AuthPage() {
             I'm a candidate
           </button>
           <button
+            type="button"
             onClick={() => setRole("employer")}
             className={`px-4 py-2 rounded-full text-sm font-medium border ${
               role === "employer" ? "bg-ink text-white border-ink" : "border-line text-slate"
@@ -68,24 +119,99 @@ export default function AuthPage() {
         )}
 
         <form onSubmit={handleSubmit(onSubmit)}>
-          <label className="text-xs uppercase tracking-wide text-slate font-semibold">Email</label>
+          {mode === "signup" && role === "employer" && (
+            <>
+              <label htmlFor="company_name" className="text-xs uppercase tracking-wide text-slate font-semibold">Company name</label>
+              <input
+                id="company_name"
+                placeholder="Acme Software"
+                className="w-full border border-line rounded-md px-3 py-2 text-sm mt-1.5 mb-3 bg-surface"
+                {...register("company_name", { required: "Company name is required", validate: NOT_BLANK })}
+              />
+              {errors.company_name && <p className="text-danger text-xs mb-2">{errors.company_name.message}</p>}
+            </>
+          )}
+
+          {mode === "signup" && (
+            <>
+              <label htmlFor="full_name" className="text-xs uppercase tracking-wide text-slate font-semibold">
+                {role === "employer" ? "Your full name" : "Full name"}
+              </label>
+              <input
+                id="full_name"
+                placeholder="Jane Doe"
+                className="w-full border border-line rounded-md px-3 py-2 text-sm mt-1.5 mb-3 bg-surface"
+                {...register("full_name", { required: "Full name is required", validate: NOT_BLANK })}
+              />
+              {errors.full_name && <p className="text-danger text-xs mb-2">{errors.full_name.message}</p>}
+            </>
+          )}
+
+          <label htmlFor="email" className="text-xs uppercase tracking-wide text-slate font-semibold">
+            {mode === "signup" && role === "employer" ? "Work email" : "Email"}
+          </label>
           <input
+            id="email"
             type="email"
             placeholder="you@example.com"
             className="w-full border border-line rounded-md px-3 py-2 text-sm mt-1.5 mb-3 bg-surface"
-            {...register("email", { required: true })}
+            {...register("email", {
+              required: "Email is required",
+              pattern: { value: EMAIL_PATTERN, message: "Enter a valid email address" },
+            })}
           />
-          {errors.email && <p className="text-danger text-xs mb-2">Email is required</p>}
+          {errors.email && <p className="text-danger text-xs mb-2">{errors.email.message}</p>}
 
-          <label className="text-xs uppercase tracking-wide text-slate font-semibold">Password</label>
+          {mode === "signup" && role === "candidate" && (
+            <>
+              <label htmlFor="phone" className="text-xs uppercase tracking-wide text-slate font-semibold">Phone</label>
+              <input
+                id="phone"
+                type="tel"
+                placeholder="03XX-XXXXXXX"
+                className="w-full border border-line rounded-md px-3 py-2 text-sm mt-1.5 mb-3 bg-surface"
+                {...register("phone", {
+                  required: "Phone is required",
+                  pattern: {
+                    value: PHONE_PATTERN,
+                    message: "Enter a valid Pakistani mobile number, e.g. 03001234567",
+                  },
+                  setValueAs: (v) => v.replace(/[\s-]/g, ""),
+                })}
+              />
+              {errors.phone && <p className="text-danger text-xs mb-2">{errors.phone.message}</p>}
+            </>
+          )}
+
+          <label htmlFor="password" className="text-xs uppercase tracking-wide text-slate font-semibold">Password</label>
           <input
+            id="password"
             type="password"
             placeholder="********"
             className="w-full border border-line rounded-md px-3 py-2 text-sm mt-1.5 mb-1 bg-surface"
-            {...register("password", { required: true, minLength: 8 })}
+            {...register("password", { required: "Password is required", minLength: { value: 8, message: "Password must be at least 8 characters" } })}
           />
           {errors.password && (
-            <p className="text-danger text-xs mb-2">Password must be at least 8 characters</p>
+            <p className="text-danger text-xs mb-2">{errors.password.message}</p>
+          )}
+
+          {mode === "signup" && (
+            <>
+              <label htmlFor="confirm_password" className="text-xs uppercase tracking-wide text-slate font-semibold">Confirm password</label>
+              <input
+                id="confirm_password"
+                type="password"
+                placeholder="********"
+                className="w-full border border-line rounded-md px-3 py-2 text-sm mt-1.5 mb-1 bg-surface"
+                {...register("confirm_password", {
+                  required: "Please confirm your password",
+                  validate: (v) => v === watch("password") || "Passwords don't match",
+                })}
+              />
+              {errors.confirm_password && (
+                <p className="text-danger text-xs mb-2">{errors.confirm_password.message}</p>
+              )}
+            </>
           )}
 
           {mode === "login" && (
@@ -94,13 +220,24 @@ export default function AuthPage() {
             </div>
           )}
 
-          <Button type="submit" variant="primary" className="w-full" disabled={isSubmitting}>
+          <Button type="submit" variant="primary" className="w-full mt-3" disabled={isSubmitting}>
             {isSubmitting ? "Please wait..." : "Continue"}
           </Button>
         </form>
 
-        <div className="text-center text-xs text-slate my-3">or</div>
-        <Button className="w-full">Continue with Google</Button>
+        {role === "candidate" && (
+          <>
+            <div className="text-center text-xs text-slate my-3">or</div>
+            <Button
+              type="button"
+              className="w-full opacity-60 cursor-not-allowed"
+              disabled
+              title="Google sign-in isn't wired up yet"
+            >
+              Continue with Google (coming soon)
+            </Button>
+          </>
+        )}
 
         <div className="text-center text-xs text-slate mt-4">
           {mode === "login" ? (

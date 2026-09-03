@@ -18,6 +18,8 @@
   --color-brass-dark: #7A5619;
   --color-brass-light: #F3E3C2;
 
+  --color-card: #F6F2E7;
+
   --color-slate: #5B6B74;
   --color-line: #E1DCCF;
 
@@ -32,6 +34,15 @@
 
   --font-display: 'Space Grotesk', sans-serif;
   --font-body: 'Inter', -apple-system, sans-serif;
+
+  --tracking-widelabel: 0.08em;
+  --radius-xl: 10px;
+}
+
+html {
+  /* Safety net: nothing should ever force horizontal scroll, even if a
+     future screen forgets to wrap/shrink something on narrow viewports. */
+  overflow-x: hidden;
 }
 
 body {

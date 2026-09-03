@@ -27,3 +27,18 @@ export async function resetPassword({ reset_token, new_password }) {
   const { data } = await api.post("/auth/reset-password", { reset_token, new_password });
   return data;
 }
+
+// PROPOSED endpoints — not yet in api_specification.yaml as of the
+// co-founder's last sync. Added here following the exact same shape as
+// forgot-password/reset-password. Confirm with co-founder before backend
+// build; drop-in swap either way since this file is the only place the
+// path/shape lives.
+export async function verifyEmail({ token }) {
+  const { data } = await api.post("/auth/verify-email", { token });
+  return data; // { user, message }
+}
+
+export async function resendVerification({ email }) {
+  const { data } = await api.post("/auth/resend-verification", { email });
+  return data;
+}

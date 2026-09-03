@@ -1,0 +1,100 @@
+@baseUrl = http://localhost:8000
+
+### Candidate self-registration — fields must match CandidateSignupSerializer
+# (email, password, full_name, phone) exactly.
+POST {{baseUrl}}/api/v1/auth/signup/candidate
+Content-Type: application/json
+
+{
+  "email": "mehmood.zain001@gmail.com",
+  "password": "SecurePass123!",
+  "full_name": "Ahmed Khan",
+  "phone": "+923001234567"
+}
+
+### Company + first company_admin registration — admin_email must be a
+# company domain, not gmail/yahoo/etc. (CompanySignupSerializer rejects free domains).
+POST {{baseUrl}}/api/v1/auth/signup/company
+Content-Type: application/json
+
+{
+  "company_name": "Acme Corp",
+  "admin_email": "admin@acmecorp.com",
+  "admin_password": "SecurePass123!",
+  "admin_full_name": "Sara Ahmed"
+}
+
+### Login — fails with 401 until the account's email is verified
+# (LoginSerializer.validate() checks email_verified_at). Captures
+# access_token/refresh_token for reuse in later requests below.
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "mehmood.zain001@gmail.com",
+  "password": "SecurePass123!"
+}
+
+> {%
+client.global.set("access_token", response.body.access_token);
+client.global.set("refresh_token", response.body.refresh_token);
+%}
+
+### Company verification status — auth-gated (IsAuthenticated); reuses the
+# access_token captured from the login request above, no manual copy-paste.
+GET {{baseUrl}}/api/v1/auth/companies/me/verification-status
+Authorization: Bearer {{access_token}}
+
+### Exchange a refresh token for a new access token — reuses the
+# refresh_token captured from the login request above.
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refresh_token": "{{refresh_token}}"
+}
+
+### Request a password reset link — always returns 200, even for an
+# unregistered email (ForgotPasswordSerializer never leaks which emails exist).
+POST {{baseUrl}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "candidate@example.com"
+}
+
+### Set a new password using the reset_token from the link the
+# forgot-password request above sent (printed to the console — EMAIL_BACKEND
+# is the console backend for now). Paste the token before running.
+@resetToken = paste-reset-token-from-console-log-here
+
+POST {{baseUrl}}/api/v1/auth/reset-password
+Content-Type: application/json
+
+{
+  "reset_token": "{{resetToken}}",
+  "new_password": "NewSecurePass123!"
+}
+
+### Verify email using the token from the verification link sent on signup
+# (not in docs/api_specification.yaml — see VerifyEmailView docstring for
+# the spec-gap note). Paste the token from the console log before running.
+@verificationToken = paste-verification-token-from-console-log-here
+
+POST {{baseUrl}}/api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "{{verificationToken}}"
+}
+
+### Resend the verification link — same 200 response whether the account
+# doesn't exist, is already verified, or genuinely gets a new link
+# (ResendVerificationSerializer.get_user() collapses all non-issue cases to None).
+POST {{baseUrl}}/api/v1/auth/resend-verification
+Content-Type: application/json
+
+{
+  "email": "candidate@example.com"
+}

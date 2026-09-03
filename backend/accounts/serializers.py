@@ -1,9 +1,12 @@
+from datetime import timedelta
+
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.http import base36_to_int, urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import serializers
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
@@ -50,12 +53,44 @@ def get_user_from_reset_token(reset_token):
 class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
     key_salt = 'accounts.EmailVerificationTokenGenerator'
 
+    # Own expiry window, independent of PASSWORD_RESET_TIMEOUT. The base
+    # class's check_token() hardcodes a read of settings.PASSWORD_RESET_TIMEOUT
+    # rather than deferring to an instance/class attribute, so getting a
+    # different timeout for this generator means overriding check_token
+    # itself (below) — not just setting an attribute.
+    timeout = timedelta(minutes=10).total_seconds()
+
     def _make_hash_value(self, user, timestamp):
         # Folds in email_verified_at (unlike the base password-reset hash,
         # which only tracks password + last_login) so the token stops
         # validating the moment it's used — same self-invalidating
         # property as the reset token, without a table.
         return f'{super()._make_hash_value(user, timestamp)}{user.email_verified_at}'
+
+    def check_token(self, user, token):
+        # Copied from PasswordResetTokenGenerator.check_token, substituting
+        # self.timeout for settings.PASSWORD_RESET_TIMEOUT in the expiry
+        # check — everything else (secret/hash verification) is identical.
+        if not (user and token):
+            return False
+        try:
+            ts_b36, _ = token.split('-')
+        except ValueError:
+            return False
+        try:
+            ts = base36_to_int(ts_b36)
+        except ValueError:
+            return False
+
+        for secret in [self.secret, *self.secret_fallbacks]:
+            if constant_time_compare(self._make_token_with_timestamp(user, ts, secret), token):
+                break
+        else:
+            return False
+
+        if (self._num_seconds(self._now()) - ts) > self.timeout:
+            return False
+        return True
 
 
 email_verification_token_generator = EmailVerificationTokenGenerator()
