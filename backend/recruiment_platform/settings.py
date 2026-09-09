@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
     'accounts',
     'company',
     'core',
@@ -50,6 +51,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -146,10 +148,35 @@ STATIC_URL = 'static/'
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
-# Console backend for now — no real SMTP credentials yet, so outgoing mail
-# (verification links, password reset links) just prints to stdout.
+# SMTP — EMAIL_HOST_USER/EMAIL_HOST_PASSWORD come from .env, never committed.
+# Defaults below target Gmail; override EMAIL_HOST/EMAIL_PORT/EMAIL_USE_TLS
+# in .env to point at a different provider (SendGrid, Mailgun, etc.) without
+# touching this file.
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@skillbridge.local')
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+# Gmail's SMTP relay expects the From header to match the authenticated
+# account (or a configured "Send mail as" alias) — default to EMAIL_HOST_USER
+# rather than Django's built-in 'webmaster@localhost', which Gmail would
+# otherwise silently reject or rewrite.
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'noreply@skillbridge.local')
+
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+
+# OAuth client ID Google-issued ID tokens must have as their `aud` claim —
+# required, not defaulted: a missing value should fail app startup rather
+# than silently accept tokens for the wrong client.
+GOOGLE_OAUTH_CLIENT_ID = config('GOOGLE_OAUTH_CLIENT_ID')
+
+# CORS
+# https://github.com/adamchainz/django-cors-headers
+# Scoped to the one frontend origin rather than CORS_ALLOW_ALL_ORIGINS —
+# the API is only ever called from FRONTEND_URL, and the JWT is sent as an
+# Authorization header (not a cookie), so CORS_ALLOW_CREDENTIALS isn't needed.
+CORS_ALLOWED_ORIGINS = [FRONTEND_URL]
+CORS_ALLOW_CREDENTIALS = True
