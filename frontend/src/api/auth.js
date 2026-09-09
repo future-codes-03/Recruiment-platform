@@ -18,6 +18,12 @@ export async function login({ email, password }) {
   return data; // { access_token, refresh_token, expires_in, user }
 }
 
+// Candidate-only. See .claude/specs/login-with-google.md.
+export async function loginWithGoogle({ id_token }) {
+  const { data } = await api.post("/auth/google", { id_token });
+  return data; // { access_token, refresh_token, expires_in, user }
+}
+
 export async function forgotPassword({ email }) {
   const { data } = await api.post("/auth/forgot-password", { email });
   return data;

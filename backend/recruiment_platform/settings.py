@@ -168,6 +168,11 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'no
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
 
+# OAuth client ID Google-issued ID tokens must have as their `aud` claim —
+# required, not defaulted: a missing value should fail app startup rather
+# than silently accept tokens for the wrong client.
+GOOGLE_OAUTH_CLIENT_ID = config('GOOGLE_OAUTH_CLIENT_ID')
+
 # CORS
 # https://github.com/adamchainz/django-cors-headers
 # Scoped to the one frontend origin rather than CORS_ALLOW_ALL_ORIGINS —

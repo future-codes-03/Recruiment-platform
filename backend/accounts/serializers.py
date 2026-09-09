@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -7,7 +8,11 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import base36_to_int, urlsafe_base64_decode, urlsafe_base64_encode
+from google.auth.exceptions import GoogleAuthError
+from google.auth.transport import requests as google_requests
+from google.oauth2 import id_token
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -257,6 +262,68 @@ class LoginSerializer(serializers.Serializer):
             'expires_in': int(jwt_settings.ACCESS_TOKEN_LIFETIME.total_seconds()),
             'user': user,
         }
+
+
+# Same generic message for every rejection branch below (bad signature, wrong
+# audience, unverified email, non-candidate role match) — a caller must not
+# be able to tell which one happened, same "never leak why" posture as
+# LoginSerializer's invalid_credentials.
+GOOGLE_AUTH_FAILURE_MESSAGE = 'Invalid Google credentials.'
+
+
+def get_or_create_google_user(raw_id_token):
+    try:
+        claims = id_token.verify_oauth2_token(
+            raw_id_token, google_requests.Request(), settings.GOOGLE_OAUTH_CLIENT_ID
+        )
+    except (ValueError, GoogleAuthError):
+        raise AuthenticationFailed(GOOGLE_AUTH_FAILURE_MESSAGE)
+
+    if not claims.get('email_verified'):
+        raise AuthenticationFailed(GOOGLE_AUTH_FAILURE_MESSAGE)
+
+    email = claims['email'].strip().lower()
+    user = User.objects.filter(email__iexact=email).first()
+    created = False
+
+    if user is None:
+        user = User.objects.create_user(
+            email=email,
+            password=None,
+            full_name=claims.get('name') or email,
+            role=UserRole.CANDIDATE,
+        )
+        user.set_unusable_password()
+        user.email_verified_at = timezone.now()
+        user.save(update_fields=['password', 'email_verified_at'])
+        created = True
+    elif user.role != UserRole.CANDIDATE:
+        # Candidate-only by design — an email that already belongs to a
+        # company_admin/recruiter/platform_admin account must never be
+        # reachable through this endpoint, enforced here rather than relying
+        # on the frontend only rendering this button for candidates.
+        raise AuthenticationFailed(GOOGLE_AUTH_FAILURE_MESSAGE)
+    # else: matched an existing candidate account (however it was originally
+    # created) — log in as-is. No is_active/email_verified_at re-check here,
+    # unlike LoginSerializer: Google already vouches for the email, and a
+    # password-created candidate account's email_verified_at guard is a
+    # different check than what this endpoint is verifying.
+
+    refresh = RefreshToken.for_user(user)
+    return {
+        'access_token': str(refresh.access_token),
+        'refresh_token': str(refresh),
+        'expires_in': int(jwt_settings.ACCESS_TOKEN_LIFETIME.total_seconds()),
+        'user': user,
+        'created': created,
+    }
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    id_token = serializers.CharField()
+
+    def save(self, **kwargs):
+        return get_or_create_google_user(self.validated_data['id_token'])
 
 
 class RefreshTokenSerializer(serializers.Serializer):

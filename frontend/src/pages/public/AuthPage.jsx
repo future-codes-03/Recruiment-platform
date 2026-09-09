@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useLocation, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
+import { GoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../../context/AuthContext";
 import { signupCandidate, signupCompany } from "../../api/auth";
 import { getErrorMessage } from "../../api/errors";
@@ -19,7 +20,7 @@ export default function AuthPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const [error, setError] = useState("");
 
   // mode and role both live in the URL, not local state — that's what makes
@@ -50,6 +51,19 @@ export default function AuthPage() {
   }
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm();
+
+  // Candidate-only, see .claude/specs/login-with-google.md. Not part of the
+  // react-hook-form-driven flow above — GoogleLogin manages its own pending
+  // UI, so this only needs the same error state the form already uses.
+  async function handleGoogleSuccess(credentialResponse) {
+    setError("");
+    try {
+      const user = await loginWithGoogle(credentialResponse.credential);
+      navigate(user.role === "candidate" ? "/dashboard" : "/employer/dashboard");
+    } catch (err) {
+      setError(getErrorMessage(err));
+    }
+  }
 
   async function onSubmit(values) {
     setError("");
@@ -228,14 +242,12 @@ export default function AuthPage() {
         {role === "candidate" && (
           <>
             <div className="text-center text-xs text-slate my-3">or</div>
-            <Button
-              type="button"
-              className="w-full opacity-60 cursor-not-allowed"
-              disabled
-              title="Google sign-in isn't wired up yet"
-            >
-              Continue with Google (coming soon)
-            </Button>
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError("Google sign-in failed. Please try again.")}
+              />
+            </div>
           </>
         )}
 
