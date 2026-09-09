@@ -6,6 +6,8 @@ urlpatterns = [
     path('signup/candidate', views.CandidateSignupView.as_view(), name='signup-candidate'),
     path('signup/company', views.CompanySignupView.as_view(), name='signup-company'),
     path('login', views.LoginView.as_view(), name='login'),
+    # Not in docs/api_specification.yaml — candidate-only, see GoogleLoginView docstring.
+    path('google', views.GoogleLoginView.as_view(), name='google-login'),
     path('refresh', views.RefreshTokenView.as_view(), name='refresh'),
     path('forgot-password', views.ForgotPasswordView.as_view(), name='forgot-password'),
     path('reset-password', views.ResetPasswordView.as_view(), name='reset-password'),

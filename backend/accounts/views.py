@@ -10,6 +10,7 @@ from .serializers import (
     CompanySerializer,
     CompanySignupSerializer,
     ForgotPasswordSerializer,
+    GoogleLoginSerializer,
     LoginSerializer,
     RefreshTokenSerializer,
     ResendVerificationSerializer,
@@ -76,6 +77,35 @@ class LoginView(APIView):
                 'user': UserSerializer(data['user']).data,
             },
             status=status.HTTP_200_OK,
+        )
+
+
+class GoogleLoginView(APIView):
+    """
+    POST /auth/google — not in docs/api_specification.yaml. Candidate-only
+    Google sign-in: exchanges a Google ID token for a SkillBridge session,
+    creating the candidate account on first sign-in. Flagged, not skipped —
+    see .claude/specs/login-with-google.md.
+    """
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = GoogleLoginSerializer(data=request.data)
+        # Unlike LoginView: a missing id_token is a client bug (400, standard
+        # DRF behavior via raise_exception=True), distinct from a rejected/
+        # invalid Google token (401, raised as AuthenticationFailed inside
+        # save() and handled automatically by DRF's exception handling).
+        serializer.is_valid(raise_exception=True)
+        data = serializer.save()
+
+        return Response(
+            {
+                'access_token': data['access_token'],
+                'refresh_token': data['refresh_token'],
+                'expires_in': data['expires_in'],
+                'user': UserSerializer(data['user']).data,
+            },
+            status=status.HTTP_201_CREATED if data['created'] else status.HTTP_200_OK,
         )
 
 
