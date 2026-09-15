@@ -10,3 +10,4 @@ pyjwt==2.13.0
 django-cors-headers==4.9.0
 google-auth==2.57.1
 requests==2.34.2
+cloudinary==1.46.2

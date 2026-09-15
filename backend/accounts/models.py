@@ -42,6 +42,11 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     full_name = models.CharField(max_length=255)
     resume_url = models.URLField(max_length=500, blank=True)
     cv_uploaded_at = models.DateTimeField(null=True, blank=True)
+    # 'jobs.Skill' as a string, not a direct import — mirrors how jobs/models.py
+    # avoids a hard import of accounts.User (settings.AUTH_USER_MODEL instead),
+    # keeping the dependency one-way at the Python-import level even though the
+    # DB relation itself now ties accounts to jobs.
+    skills = models.ManyToManyField('jobs.Skill', related_name='candidates', blank=True)
     email_verified_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)

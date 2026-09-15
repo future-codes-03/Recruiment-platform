@@ -1,5 +1,9 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import { login as loginApi, loginWithGoogle as loginWithGoogleApi } from "../api/auth";
+import {
+  login as loginApi,
+  loginWithGoogle as loginWithGoogleApi,
+} from "../api/auth";
+import { getMyProfile } from "../api/profile";
 
 const AuthContext = createContext(null);
 
@@ -28,20 +32,35 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const data = await loginApi({ email, password });
-    localStorage.setItem(TOKEN_KEY, data.access_token);
+    let user = data.user;
+     localStorage.setItem(TOKEN_KEY, data.access_token);
     localStorage.setItem(REFRESH_KEY, data.refresh_token);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+
+    if (user.role === "candidate") {
+      const profile = await getMyProfile();
+      user = { ...user, ...profile }; // adds resume_url, profile_complete, skills
+    }
+
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    setUser(user);
+    return user;
   }
 
   async function loginWithGoogle(id_token) {
     const data = await loginWithGoogleApi({ id_token });
+    let user = data.user;
+
+    
     localStorage.setItem(TOKEN_KEY, data.access_token);
     localStorage.setItem(REFRESH_KEY, data.refresh_token);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+
+    if (user.role === "candidate") {
+      const profile = await getMyProfile();
+      user = { ...user, ...profile }; // adds resume_url, profile_complete, skills
+    }
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    setUser(user);
+    return user;
   }
 
   function logout() {
@@ -60,7 +79,9 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, setSession }}>
+    <AuthContext.Provider
+      value={{ user, loading, login, loginWithGoogle, logout, setSession }}
+    >
       {children}
     </AuthContext.Provider>
   );
