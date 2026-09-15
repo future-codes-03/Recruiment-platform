@@ -1,11 +1,16 @@
 from rest_framework import status
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
+from core.permissions import IsCandidate
+
 from .notifications import send_password_reset_email, send_verification_email
 from .serializers import (
+    CandidateProfileSerializer,
+    CandidateProfileWriteSerializer,
     CandidateSignupSerializer,
     CompanySerializer,
     CompanySignupSerializer,
@@ -219,3 +224,31 @@ class CompanyVerificationStatusView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class CandidateProfileView(APIView):
+    """
+    GET/PUT/PATCH /api/v1/me/profile — candidate's own CV + skills.
+    PUT = full submission (both cv and skills required). PATCH = partial
+    edit (either field, independently). Candidate-only; identifies the
+    user from the access token, never a submitted user_id.
+    """
+    permission_classes = [IsAuthenticated, IsCandidate]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def get(self, request):
+        return Response(CandidateProfileSerializer(request.user).data, status=status.HTTP_200_OK)
+
+    def put(self, request):
+        return self._write(request, partial=False)
+
+    def patch(self, request):
+        return self._write(request, partial=True)
+
+    def _write(self, request, partial):
+        serializer = CandidateProfileWriteSerializer(
+            data=request.data, partial=partial, context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(CandidateProfileSerializer(user).data, status=status.HTTP_200_OK)

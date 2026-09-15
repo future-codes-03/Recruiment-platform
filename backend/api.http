@@ -44,7 +44,7 @@ client.global.set("refresh_token", response.body.refresh_token);
 ### Company verification status — auth-gated (IsAuthenticated); reuses the
 # access_token captured from the login request above, no manual copy-paste.
 GET {{baseUrl}}/api/v1/auth/companies/me/verification-status
-Authorization: Bearer {{access_token}}
+Authorization: Bearer access token
 
 ### Exchange a refresh token for a new access token — reuses the
 # refresh_token captured from the login request above.
@@ -52,7 +52,7 @@ POST {{baseUrl}}/api/v1/auth/refresh
 Content-Type: application/json
 
 {
-  "refresh_token": "{{refresh_token}}"
+  "refresh_token": "refresh token"
 }
 
 ### Request a password reset link — always returns 200, even for an
@@ -98,3 +98,29 @@ Content-Type: application/json
 {
   "email": "candidate@example.com"
 }
+
+### Browse published jobs — public, no Authorization header needed.
+# Captures the first result's id into {{job_id}} for the detail request
+# below. Run `python manage.py seed_demo_jobs` first if this comes back empty.
+# @name publicJobList
+GET {{baseUrl}}/api/v1/public/jobs
+
+> {%
+client.global.set("job_id", response.body.results[0].id);
+%}
+
+### Browse published jobs filtered by a required skill (case-insensitive
+# match on Skill.name, e.g. matches "React" seeded by seed_demo_jobs).
+GET {{baseUrl}}/api/v1/public/jobs?skill=React
+
+### Browse published jobs — page 2 (only returns results once there are
+# more than PublicResultsPagination.page_size = 20 published jobs).
+GET {{baseUrl}}/api/v1/public/jobs?page=2
+
+### Job detail — public, no Authorization header needed. Reuses job_id
+# captured from the list request above.
+GET {{baseUrl}}/api/v1/public/jobs/job_id
+
+### Job detail — 404 case (nonexistent id). A draft or closed job's real id
+# 404s the same way — they're indistinguishable from a nonexistent one by design.
+GET {{baseUrl}}/api/v1/public/jobs/00000000-0000-0000-0000-000000000000

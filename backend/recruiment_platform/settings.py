@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'accounts',
     'company',
     'core',
+    'jobs',
+    'payments',
 ]
 
 MIDDLEWARE = [
@@ -65,8 +67,24 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
 
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-    )
+    ),
+    'EXCEPTION_HANDLER': 'core.exceptions.custom_exception_handler',
 }
+
+# Cloudinary (candidate CV storage)
+# https://cloudinary.com/documentation/django_integration
+CLOUDINARY_CLOUD_NAME = config('CLOUDINARY_CLOUD_NAME', default='')
+CLOUDINARY_API_KEY = config('CLOUDINARY_API_KEY', default='')
+CLOUDINARY_API_SECRET = config('CLOUDINARY_API_SECRET', default='')
+
+import cloudinary
+
+cloudinary.config(
+    cloud_name=CLOUDINARY_CLOUD_NAME,
+    api_key=CLOUDINARY_API_KEY,
+    api_secret=CLOUDINARY_API_SECRET,
+    secure=True,
+)
 
 ROOT_URLCONF = 'recruiment_platform.urls'
 

@@ -3,3 +3,4 @@ venv/
 .vscode/
 .claude/
 CLAUDE.md
+*.txt

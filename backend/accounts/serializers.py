@@ -1,9 +1,11 @@
 from datetime import timedelta
 
+import cloudinary.uploader
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 from django.utils.encoding import force_bytes, force_str
@@ -18,6 +20,7 @@ from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from company.models import Company
+from jobs.models import Skill
 
 from .models import User, UserRole
 
@@ -132,6 +135,86 @@ class CompanySerializer(serializers.ModelSerializer):
         model = Company
         fields = ['id', 'name', 'industry', 'is_verified']
         read_only_fields = fields
+
+
+class CandidateProfileSerializer(serializers.ModelSerializer):
+    skills = serializers.SlugRelatedField(many=True, slug_field='name', read_only=True)
+    profile_complete = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = ['resume_url', 'cv_uploaded_at', 'skills', 'profile_complete']
+        read_only_fields = fields
+
+    def get_profile_complete(self, obj):
+        return bool(obj.resume_url) and obj.skills.exists()
+
+
+MAX_CV_SIZE_BYTES = 5 * 1024 * 1024  # 5MB — not specified anywhere, a reasonable default
+
+
+class CandidateProfileWriteSerializer(serializers.Serializer):
+    # required=True here is the PUT ("full submission") contract; a PATCH
+    # instantiates this same class with partial=True, which DRF
+    # automatically relaxes to optional for every field.
+    cv = serializers.FileField(required=True)
+    skills = serializers.ListField(
+        child=serializers.CharField(max_length=100, allow_blank=False, trim_whitespace=True),
+        required=True, allow_empty=False,
+    )
+
+    def validate_cv(self, value):
+        if not value.name.lower().endswith('.pdf'):
+            raise serializers.ValidationError('CV must be a PDF file (.pdf).')
+        if value.size > MAX_CV_SIZE_BYTES:
+            raise serializers.ValidationError('CV file must be 5MB or smaller.')
+        return value
+
+    def validate_skills(self, value):
+        cleaned = [s.strip() for s in value if s.strip()]
+        if not cleaned:
+            raise serializers.ValidationError('At least one non-empty skill is required.')
+        return cleaned
+
+    def validate(self, attrs):
+        # On a PATCH, DRF simply omits untouched optional fields from
+        # attrs — guard against a PATCH that supplies neither field.
+        if self.partial and not attrs:
+            raise serializers.ValidationError('At least one of cv or skills must be provided.')
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+
+        # Multi-row write: creating new Skill catalog rows plus the M2M
+        # through-table rows linking them to the candidate, so wrap in
+        # transaction.atomic() per backend/CLAUDE.md's rule for multi-row
+        # writes.
+        with transaction.atomic():
+            if 'cv' in self.validated_data:
+                upload = cloudinary.uploader.upload(
+                    self.validated_data['cv'],
+                    resource_type='raw',  # required for non-image files like PDFs
+                    folder='candidate_cvs',
+                    public_id=str(user.id),
+                    overwrite=True,
+                )
+                user.resume_url = upload['secure_url']
+                user.cv_uploaded_at = timezone.now()
+                user.save(update_fields=['resume_url', 'cv_uploaded_at'])
+
+            if 'skills' in self.validated_data:
+                # Canonicalize each typed skill against the same case-insensitive
+                # Skill catalog job skill requirements use, instead of storing
+                # free text — dedupes "React"/"react"/"ReactJS" drift and lets a
+                # candidate's skills be matched against job requirements later.
+                skill_objs = [
+                    Skill.objects.get_or_create(name__iexact=name, defaults={'name': name})[0]
+                    for name in self.validated_data['skills']
+                ]
+                user.skills.set(skill_objs)
+
+        return user
 
 
 class CandidateSignupSerializer(serializers.Serializer):
