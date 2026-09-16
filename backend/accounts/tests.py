@@ -1,7 +1,9 @@
+import uuid
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -125,6 +127,15 @@ class CandidateProfileViewTests(APITestCase):
     def _pdf(self, name='cv.pdf'):
         return SimpleUploadedFile(name, b'%PDF-1.4 fake content', content_type='application/pdf')
 
+    def _skill(self, slug):
+        """Fetch a seeded catalog skill. The catalog is populated by
+        jobs/migrations/0004, so these rows exist in the test database
+        without any setUp of our own."""
+        return Skill.objects.get(slug=slug)
+
+    def _names(self, body):
+        return [s['name'] for s in body['skills']]
+
     def test_get_requires_auth(self):
         response = self.client.get(self.url)
 
@@ -156,30 +167,69 @@ class CandidateProfileViewTests(APITestCase):
 
         response = self.client.put(
             self.url,
-            {'cv': self._pdf(), 'skills': ['Python', 'Django']},
+            {
+                'cv': self._pdf(),
+                'skills': [str(self._skill('backend').id), str(self._skill('devops').id)],
+            },
             format='multipart',
         )
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertTrue(body['profile_complete'])
-        self.assertCountEqual(body['skills'], ['Python', 'Django'])
+        self.assertCountEqual(self._names(body), ['Backend', 'DevOps'])
         self.assertEqual(body['resume_url'], 'https://res.cloudinary.com/demo/raw/upload/cv.pdf')
         mock_upload.assert_called_once()
-        self.assertEqual(Skill.objects.filter(name__in=['Python', 'Django']).count(), 2)
 
-    @patch('accounts.serializers.cloudinary.uploader.upload')
-    def test_put_reuses_existing_skill_case_insensitively(self, mock_upload):
-        mock_upload.return_value = {'secure_url': 'https://res.cloudinary.com/demo/raw/upload/cv.pdf'}
-        Skill.objects.create(name='Python')
+    def test_get_returns_skills_as_catalog_objects(self):
+        user = self._make_user()
+        user.skills.set([self._skill('frontend')])
+        self._auth(user)
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        skill = response.json()['skills'][0]
+        self.assertEqual(
+            skill,
+            {'id': str(self._skill('frontend').id), 'slug': 'frontend', 'name': 'Frontend'},
+        )
+
+    def test_put_rejects_free_text_skill_name(self):
+        """The whole point of the catalog: a typed name is not an id, so it
+        is rejected rather than silently creating a new Skill row."""
+        self._auth(self._make_user())
+        before = Skill.objects.count()
+
+        response = self.client.put(
+            self.url, {'cv': self._pdf(), 'skills': ['React']}, format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()['error_code'], 'ERR_VALIDATION')
+        self.assertEqual(Skill.objects.count(), before)
+
+    def test_put_rejects_unknown_skill_id(self):
+        self._auth(self._make_user())
+        before = Skill.objects.count()
+
+        response = self.client.put(
+            self.url,
+            {'cv': self._pdf(), 'skills': [str(uuid.uuid4())]},
+            format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Skill.objects.count(), before)
+
+    def test_put_rejects_empty_skill_list(self):
         self._auth(self._make_user())
 
         response = self.client.put(
-            self.url, {'cv': self._pdf(), 'skills': ['python']}, format='multipart',
+            self.url, {'cv': self._pdf(), 'skills': []}, format='json',
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Skill.objects.filter(name__iexact='python').count(), 1)
+        self.assertEqual(response.status_code, 400)
 
     def test_put_missing_skills_is_400(self):
         self._auth(self._make_user())
@@ -194,7 +244,8 @@ class CandidateProfileViewTests(APITestCase):
         not_pdf = SimpleUploadedFile('cv.docx', b'fake', content_type='application/msword')
 
         response = self.client.put(
-            self.url, {'cv': not_pdf, 'skills': ['Python']}, format='multipart',
+            self.url, {'cv': not_pdf, 'skills': [str(self._skill('backend').id)]},
+            format='multipart',
         )
 
         self.assertEqual(response.status_code, 400)
@@ -206,11 +257,13 @@ class CandidateProfileViewTests(APITestCase):
         user.save(update_fields=['resume_url'])
         self._auth(user)
 
-        response = self.client.patch(self.url, {'skills': ['React']}, format='json')
+        response = self.client.patch(
+            self.url, {'skills': [str(self._skill('mobile').id)]}, format='json',
+        )
 
         self.assertEqual(response.status_code, 200)
         body = response.json()
-        self.assertCountEqual(body['skills'], ['React'])
+        self.assertCountEqual(self._names(body), ['Mobile'])
         self.assertEqual(body['resume_url'], 'https://res.cloudinary.com/demo/raw/upload/old.pdf')
         mock_upload.assert_not_called()
 
@@ -218,7 +271,7 @@ class CandidateProfileViewTests(APITestCase):
     def test_patch_updates_only_cv(self, mock_upload):
         mock_upload.return_value = {'secure_url': 'https://res.cloudinary.com/demo/raw/upload/new.pdf'}
         user = self._make_user()
-        user.skills.set([Skill.objects.create(name='Python')])
+        user.skills.set([self._skill('backend')])
         self._auth(user)
 
         response = self.client.patch(self.url, {'cv': self._pdf()}, format='multipart')
@@ -226,7 +279,7 @@ class CandidateProfileViewTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body['resume_url'], 'https://res.cloudinary.com/demo/raw/upload/new.pdf')
-        self.assertCountEqual(body['skills'], ['Python'])
+        self.assertCountEqual(self._names(body), ['Backend'])
 
     def test_patch_with_no_fields_is_400(self):
         self._auth(self._make_user())
@@ -234,3 +287,97 @@ class CandidateProfileViewTests(APITestCase):
         response = self.client.patch(self.url, {}, format='json')
 
         self.assertEqual(response.status_code, 400)
+
+
+class CandidateCVDeleteViewTests(APITestCase):
+    url = '/api/v1/me/profile/cv'
+
+    def _make_user(self, role=UserRole.CANDIDATE, **extra):
+        company = None
+        if role in (UserRole.COMPANY_ADMIN, UserRole.RECRUITER):
+            company = Company.objects.create(name='Acme')
+        return User.objects.create_user(
+            email=extra.pop('email', 'cand@example.com'),
+            password='pw12345678',
+            full_name='Candidate',
+            role=role,
+            company=company,
+        )
+
+    def _auth(self, user):
+        token = RefreshToken.for_user(user).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def _user_with_cv(self):
+        user = self._make_user()
+        user.resume_url = 'https://res.cloudinary.com/demo/raw/upload/cv.pdf'
+        user.cv_uploaded_at = timezone.now()
+        user.save(update_fields=['resume_url', 'cv_uploaded_at'])
+        return user
+
+    def test_requires_auth(self):
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()['error_code'], 'ERR_UNAUTHENTICATED')
+
+    def test_rejects_non_candidate(self):
+        self._auth(self._make_user(role=UserRole.COMPANY_ADMIN, email='admin@acme.com'))
+
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()['error_code'], 'ERR_FORBIDDEN')
+
+    def test_no_cv_on_file_is_404(self):
+        self._auth(self._make_user())
+
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()['error_code'], 'ERR_CV_NOT_FOUND')
+
+    @patch('accounts.views.cloudinary.uploader.destroy')
+    def test_deletes_cv_and_clears_fields(self, mock_destroy):
+        mock_destroy.return_value = {'result': 'ok'}
+        user = self._user_with_cv()
+        self._auth(user)
+
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['resume_url'], '')
+        self.assertIsNone(body['cv_uploaded_at'])
+        self.assertFalse(body['profile_complete'])
+        mock_destroy.assert_called_once_with(f'candidate_cvs/{user.id}', resource_type='raw')
+        user.refresh_from_db()
+        self.assertEqual(user.resume_url, '')
+        self.assertIsNone(user.cv_uploaded_at)
+
+    @patch('accounts.views.cloudinary.uploader.destroy')
+    def test_succeeds_even_if_asset_already_gone_on_cloudinary(self, mock_destroy):
+        mock_destroy.return_value = {'result': 'not found'}
+        user = self._user_with_cv()
+        self._auth(user)
+
+        response = self.client.delete(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.resume_url, '')
+        self.assertIsNone(user.cv_uploaded_at)
+
+    @patch('accounts.views.cloudinary.uploader.destroy')
+    def test_second_delete_is_404_not_silent_success(self, mock_destroy):
+        mock_destroy.return_value = {'result': 'ok'}
+        user = self._user_with_cv()
+        self._auth(user)
+
+        first = self.client.delete(self.url)
+        second = self.client.delete(self.url)
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 404)
+        self.assertEqual(second.json()['error_code'], 'ERR_CV_NOT_FOUND')
+        mock_destroy.assert_called_once()

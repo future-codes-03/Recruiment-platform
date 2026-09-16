@@ -21,6 +21,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from company.models import Company
 from jobs.models import Skill
+from jobs.serializers import SkillSerializer
 
 from .models import User, UserRole
 
@@ -138,7 +139,11 @@ class CompanySerializer(serializers.ModelSerializer):
 
 
 class CandidateProfileSerializer(serializers.ModelSerializer):
-    skills = serializers.SlugRelatedField(many=True, slug_field='name', read_only=True)
+    # Full {id, slug, name} objects rather than bare names: the onboarding
+    # picker pre-selects a candidate's saved skills by id, and resolving
+    # names back to ids client-side would reintroduce exactly the
+    # name-matching fragility the catalog exists to remove.
+    skills = SkillSerializer(many=True, read_only=True)
     profile_complete = serializers.SerializerMethodField()
 
     class Meta:
@@ -158,8 +163,12 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
     # instantiates this same class with partial=True, which DRF
     # automatically relaxes to optional for every field.
     cv = serializers.FileField(required=True)
-    skills = serializers.ListField(
-        child=serializers.CharField(max_length=100, allow_blank=False, trim_whitespace=True),
+    # Catalog ids only — never free text. An id that isn't in the Skill
+    # table is a 400 from DRF, so the API can't grow "React" alongside
+    # "react.js" even if a client bypasses the frontend picker. This is the
+    # enforcement; the picker is only the convenience.
+    skills = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=Skill.objects.all(),
         required=True, allow_empty=False,
     )
 
@@ -169,12 +178,6 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
         if value.size > MAX_CV_SIZE_BYTES:
             raise serializers.ValidationError('CV file must be 5MB or smaller.')
         return value
-
-    def validate_skills(self, value):
-        cleaned = [s.strip() for s in value if s.strip()]
-        if not cleaned:
-            raise serializers.ValidationError('At least one non-empty skill is required.')
-        return cleaned
 
     def validate(self, attrs):
         # On a PATCH, DRF simply omits untouched optional fields from
@@ -186,10 +189,9 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
     def save(self, **kwargs):
         user = self.context['request'].user
 
-        # Multi-row write: creating new Skill catalog rows plus the M2M
-        # through-table rows linking them to the candidate, so wrap in
-        # transaction.atomic() per backend/CLAUDE.md's rule for multi-row
-        # writes.
+        # Multi-row write: the user row plus the M2M through-table rows
+        # linking them to catalog skills, so wrap in transaction.atomic()
+        # per backend/CLAUDE.md's rule for multi-row writes.
         with transaction.atomic():
             if 'cv' in self.validated_data:
                 upload = cloudinary.uploader.upload(
@@ -204,15 +206,10 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
                 user.save(update_fields=['resume_url', 'cv_uploaded_at'])
 
             if 'skills' in self.validated_data:
-                # Canonicalize each typed skill against the same case-insensitive
-                # Skill catalog job skill requirements use, instead of storing
-                # free text — dedupes "React"/"react"/"ReactJS" drift and lets a
-                # candidate's skills be matched against job requirements later.
-                skill_objs = [
-                    Skill.objects.get_or_create(name__iexact=name, defaults={'name': name})[0]
-                    for name in self.validated_data['skills']
-                ]
-                user.skills.set(skill_objs)
+                # PrimaryKeyRelatedField has already resolved these to real
+                # Skill instances (and rejected anything not in the catalog),
+                # so there is nothing left to canonicalize here.
+                user.skills.set(self.validated_data['skills'])
 
         return user
 

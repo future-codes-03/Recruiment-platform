@@ -1,3 +1,4 @@
+import cloudinary.uploader
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -251,4 +252,32 @@ class CandidateProfileView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+        return Response(CandidateProfileSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class CandidateCVDeleteView(APIView):
+    """
+    DELETE /api/v1/me/profile/cv — removes the candidate's uploaded CV.
+    Candidate-only; identifies the user from the access token, never a
+    submitted user_id.
+    """
+    permission_classes = [IsAuthenticated, IsCandidate]
+
+    def delete(self, request):
+        user = request.user
+        if not user.resume_url:
+            return Response(
+                {'error_code': 'ERR_CV_NOT_FOUND', 'message': 'No CV on file to delete.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Don't branch on the destroy result ('ok' vs 'not found') — either
+        # way the candidate's desired end state (no CV on their profile) is
+        # the same, and blocking on a Cloudinary-side asset that's already
+        # gone would leave the profile stuck with a dangling resume_url.
+        cloudinary.uploader.destroy(f'candidate_cvs/{user.id}', resource_type='raw')
+
+        user.resume_url = ''
+        user.cv_uploaded_at = None
+        user.save(update_fields=['resume_url', 'cv_uploaded_at'])
         return Response(CandidateProfileSerializer(user).data, status=status.HTTP_200_OK)
