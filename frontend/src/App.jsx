@@ -8,6 +8,10 @@ import VerifyEmailPage from "./pages/public/VerifyEmailPage";
 import ForgotPasswordPage from "./pages/public/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/public/ResetPasswordPage";
 import NotFoundPage from "./pages/public/NotFoundPage";
+import JobsBrowse from "./pages/public/JobsBrowse";
+import CandidateOnboarding from "./pages/candidate/CandidateOnboarding";
+import CandidateDashboard from "./pages/candidate/Dashboard";
+import CandidateJobDetail from "./pages/candidate/JobDetail";
 
 import EmployerDashboard from "./pages/employer/Dashboard";
 import JobForm from "./pages/employer/JobForm";
@@ -18,6 +22,8 @@ import CandidateDetail from "./pages/employer/CandidateDetail";
 import Billing from "./pages/employer/Billing";
 import EmployerSettings from "./pages/employer/Settings";
 import StyleGuide from "./pages/employer/StyleGuide";
+import EditProfile from "./pages/candidate/EditProfile";
+// ...
 
 // Placeholder pages for routes we haven't built yet this session —
 // swapped for real pages one at a time as we build them.
@@ -42,10 +48,28 @@ function App() {
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           <Route
+            path="/onboarding"
+            element={
+              <ProtectedRoute role="candidate">
+                <CandidateOnboarding />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/dashboard"
             element={
               <ProtectedRoute role="candidate">
-                <ComingSoon label="Candidate dashboard" />
+                <CandidateDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/jobs" element={<JobsBrowse />} />
+          <Route path="/jobs/:id" element={<CandidateJobDetail />} />
+          <Route
+            path="/jobs/:id/assessment"
+            element={
+              <ProtectedRoute role="candidate">
+                <ComingSoon label="Assessment" />
               </ProtectedRoute>
             }
           />
@@ -54,6 +78,14 @@ function App() {
             element={
               <ProtectedRoute roles={["company_admin", "recruiter"]}>
                 <EmployerDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute role="candidate">
+                <EditProfile />
               </ProtectedRoute>
             }
           />

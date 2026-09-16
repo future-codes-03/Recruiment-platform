@@ -5,15 +5,30 @@ export async function listJobs({ status, page } = {}) {
   return data; // { results, count, next }
 }
 
+// --- Candidate-facing / public browsing -----------------------------------
+// GET /jobs above is company-scoped ("jobs belonging to the authenticated
+// user's company" per api_specification.yaml) — that's the employer side
+// only. Candidates browse through the separate /public/jobs endpoints,
+// which are unauthenticated and already exclude closed jobs server-side.
+// Do not point candidate pages at listJobs/getJob above — use these instead.
+export async function listPublicJobs({ skill, page } = {}) {
+  const { data } = await api.get("/public/jobs", { params: { skill, page } });
+  return data; // { results, count }
+}
+
+export async function getPublicJob(jobId) {
+  const { data } = await api.get(`/public/jobs/${jobId}`);
+  return data; // Job
+}
+
 export async function createJob(job) {
   const { data } = await api.post("/jobs", job);
   return data; // Job
 }
 
-// PROPOSED — GET /jobs/{job_id} isn't in api_specification.yaml as of the
-// co-founder's last sync (only PATCH existed). Added so the job-detail
-// screens have something to fetch a single job from. Confirm before backend
-// build; drop-in swap either way since this file is the only place it lives.
+// PROPOSED — still not in api_specification.yaml (only PATCH /jobs/{job_id}
+// is defined there). Kept for the employer job-detail screen; confirm with
+// co-founder before backend build.
 export async function getJob(jobId) {
   const { data } = await api.get(`/jobs/${jobId}`);
   return data; // Job

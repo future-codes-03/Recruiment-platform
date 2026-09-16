@@ -36,13 +36,20 @@ class JobSeniority(models.TextChoices):
 class Skill(models.Model):
     """Canonical skill catalog. Normalizes what used to be a free-text
     skill_name on JobSkillRequirement, and is the target of the Job<->Skill
-    many-to-many relation (through JobSkillRequirement)."""
+    many-to-many relation (through JobSkillRequirement).
+
+    Closed catalog: rows are seeded by migration, never created from user
+    input. `slug` is the stable key and `name` is display-only, so a skill
+    can be renamed ("Data/ML" -> "Data Science / ML") without invalidating
+    anything that points at it."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug = models.SlugField(max_length=100, unique=True)
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'skills'
+        ordering = ['name']
         constraints = [
             models.UniqueConstraint(Lower('name'), name='uq_skill_name_ci'),
         ]

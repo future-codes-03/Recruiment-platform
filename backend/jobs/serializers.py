@@ -1,6 +1,18 @@
 from rest_framework import serializers
 
-from .models import Job, JobSkillRequirement
+from .models import Job, JobSkillRequirement, Skill
+
+
+class SkillSerializer(serializers.ModelSerializer):
+    """The public catalog shape, reused anywhere a skill is echoed back —
+    GET /public/skills and the candidate profile's saved skills. `id` is
+    what writes are keyed on; `slug` is the stable key for anything the
+    frontend needs to special-case; `name` is display-only."""
+
+    class Meta:
+        model = Skill
+        fields = ['id', 'slug', 'name']
+        read_only_fields = fields
 
 
 class SkillRequirementSerializer(serializers.ModelSerializer):
@@ -22,6 +34,10 @@ class PublicJobSerializer(serializers.ModelSerializer):
     # Django FK fields expose a `<field>_id` attribute automatically, so this
     # needs no explicit `source=`.
     company_id = serializers.UUIDField(read_only=True)
+    # Needs an explicit source= (unlike company_id above) since it traverses
+    # the FK. Both list views select_related('company') so this costs no
+    # extra query per row.
+    company_name = serializers.CharField(source='company.name', read_only=True)
     slots_remaining = serializers.SerializerMethodField()
     overall_min_score = serializers.DecimalField(
         max_digits=5, decimal_places=2, coerce_to_string=False, allow_null=True, read_only=True
@@ -31,7 +47,7 @@ class PublicJobSerializer(serializers.ModelSerializer):
     class Meta:
         model = Job
         fields = [
-            'id', 'company_id', 'title', 'description', 'seniority', 'status',
+            'id', 'company_id', 'company_name', 'title', 'description', 'seniority', 'status',
             'guaranteed_slots', 'slots_filled', 'slots_remaining',
             'overall_min_score', 'skill_requirements',
             'published_at', 'closed_at', 'created_at',
