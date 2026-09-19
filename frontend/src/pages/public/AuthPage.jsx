@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, useLocation, Link } from "react-router-do
 import { useForm } from "react-hook-form";
 import { GoogleLogin } from "@react-oauth/google";
 import { useAuth } from "../../context/AuthContext";
-import { signupCandidate, signupCompany } from "../../api/auth";
+import { signupCandidate, signupCompany, resendVerification } from "../../api/auth";
 import { getErrorMessage } from "../../api/errors";
 import Button from "../../components/shared/Button";
 
@@ -16,12 +16,71 @@ const PHONE_PATTERN = /^03\d{9}$/;
 const NOT_BLANK = (v) => v.trim().length > 0 || "This can't be just whitespace";
 const VALID_ROLES = ["candidate", "employer"];
 
+// Small inline SVGs — no new icon dependency for a two-icon toggle.
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.7 18.7 0 0 1 5.06-5.94M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
+
+// Wraps a password <input> with a show/hide toggle button. Kept as a small
+// local component rather than duplicating the button markup twice (login
+// password, and — on signup — password + confirm password).
+function PasswordField({ id, placeholder, registerProps, className, error }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <>
+      <div className="relative">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          placeholder={placeholder}
+          className={`${className} pr-10`}
+          {...registerProps}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          tabIndex={-1}
+          aria-label={visible ? "Hide password" : "Show password"}
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate hover:text-ink"
+          style={{ marginTop: "-6px" }}
+        >
+          {visible ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+      </div>
+      {error && <p className="text-danger text-xs mb-2">{error}</p>}
+    </>
+  );
+}
+
 export default function AuthPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { login, loginWithGoogle } = useAuth();
   const [error, setError] = useState("");
+
+  // Login can fail for two indistinguishable reasons server-side — wrong
+  // password, or a real password match on an account that's never been
+  // verified (LoginSerializer folds both into the same generic message on
+  // purpose, so a caller can't tell which happened). Surfacing a resend
+  // option after ANY login failure — worded to not assert unverified is
+  // the cause — is what makes an unverified account recoverable at all
+  // without leaking whether that's what actually happened.
+  const [resendState, setResendState] = useState("idle"); // idle | sending | sent
+  const [resendError, setResendError] = useState("");
 
   // mode and role both live in the URL, not local state — that's what makes
   // the toggle buttons and the URL agree, and what makes the buttons survive
@@ -52,13 +111,19 @@ export default function AuthPage() {
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm();
 
-  // Candidates land on /onboarding automatically until they've uploaded a
-  // resume (resume_url is set server-side once they do — see
-  // accounts/models.py). After that, straight to /dashboard. Employers
-  // always go to /employer/dashboard; they don't have an onboarding step.
+  // Candidates land on /onboarding automatically until they've cleared the
+  // profile-completion gate; email/password candidates never have phone/
+  // full_name on missing_fields (both were collected at signup), so this
+  // reduces to the pre-existing resume_url check for them. See
+  // required_profile_fields() in accounts/serializers.py for the source of
+  // truth this mirrors. Employers always go to /employer/dashboard; they
+  // don't have an onboarding step.
   function postLoginPath(user) {
     if (user.role !== "candidate") return "/employer/dashboard";
-    return user.resume_url ? "/dashboard" : "/onboarding";
+    const missing = user.missing_fields || [];
+    const hasBlockingGap = missing.includes("phone") || missing.includes("full_name");
+    if (hasBlockingGap || !user.resume_url) return "/onboarding";
+    return "/dashboard";
   }
 
   // Candidate-only, see .claude/specs/login-with-google.md. Not part of the
@@ -76,6 +141,8 @@ export default function AuthPage() {
 
   async function onSubmit(values) {
     setError("");
+    setResendState("idle");
+    setResendError("");
     try {
       if (mode === "login") {
         const user = await login(values.email, values.password);
@@ -106,6 +173,24 @@ export default function AuthPage() {
       }
     } catch (err) {
       setError(getErrorMessage(err));
+    }
+  }
+
+  // Backend always returns 200 with a generic message regardless of
+  // whether the account exists, is already verified, or genuinely got a
+  // new link — never distinguishing is the point, so there's no error
+  // branch to design for here beyond a network/validation failure.
+  async function handleResend() {
+    const email = watch("email");
+    if (!email) return;
+    setResendState("sending");
+    setResendError("");
+    try {
+      await resendVerification({ email });
+      setResendState("sent");
+    } catch (err) {
+      setResendState("idle");
+      setResendError(getErrorMessage(err, "Couldn't send that right now. Try again."));
     }
   }
 
@@ -173,7 +258,28 @@ export default function AuthPage() {
           </div>
 
           {error && (
-            <div className="bg-danger-bg text-danger text-xs rounded-xl px-3.5 py-2.5 mb-4">{error}</div>
+            <div className="bg-danger-bg text-danger text-xs rounded-xl px-3.5 py-2.5 mb-4">
+              <p>{error}</p>
+              {mode === "login" && resendState !== "sent" && (
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendState === "sending"}
+                  className="text-danger font-semibold underline mt-1.5 disabled:opacity-60"
+                >
+                  {resendState === "sending"
+                    ? "Sending..."
+                    : "If your account isn't verified yet, resend the verification email"}
+                </button>
+              )}
+              {resendError && <p className="mt-1.5">{resendError}</p>}
+            </div>
+          )}
+
+          {resendState === "sent" && (
+            <div className="bg-brass-light/50 text-ink text-xs rounded-xl px-3.5 py-2.5 mb-4">
+              If that email needs verification, a new link has been sent.
+            </div>
           )}
 
           <form onSubmit={handleSubmit(onSubmit)}>
@@ -242,33 +348,30 @@ export default function AuthPage() {
             )}
 
             <label htmlFor="password" className={labelClass}>Password</label>
-            <input
+            <PasswordField
               id="password"
-              type="password"
               placeholder="********"
               className={`${inputClass} mb-1`}
-              {...register("password", { required: "Password is required", minLength: { value: 8, message: "Password must be at least 8 characters" } })}
+              registerProps={register("password", {
+                required: "Password is required",
+                minLength: { value: 8, message: "Password must be at least 8 characters" },
+              })}
+              error={errors.password?.message}
             />
-            {errors.password && (
-              <p className="text-danger text-xs mb-2">{errors.password.message}</p>
-            )}
 
             {mode === "signup" && (
               <>
                 <label htmlFor="confirm_password" className={labelClass}>Confirm password</label>
-                <input
+                <PasswordField
                   id="confirm_password"
-                  type="password"
                   placeholder="********"
                   className={`${inputClass} mb-1`}
-                  {...register("confirm_password", {
+                  registerProps={register("confirm_password", {
                     required: "Please confirm your password",
                     validate: (v) => v === watch("password") || "Passwords don't match",
                   })}
+                  error={errors.confirm_password?.message}
                 />
-                {errors.confirm_password && (
-                  <p className="text-danger text-xs mb-2">{errors.confirm_password.message}</p>
-                )}
               </>
             )}
 

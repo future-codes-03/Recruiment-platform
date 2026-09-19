@@ -1,35 +1,49 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { updateMyProfile } from "../../api/profile";
+import { getSkillCatalog } from "../../api/skills";
 import { getErrorMessage } from "../../api/errors";
 import Button from "../../components/shared/Button";
 import Card from "../../components/shared/Card";
 import ProgressBar from "../../components/shared/ProgressBar";
 
-// Candidate profile fields the backend User model already has
-// (resume_url, cv_uploaded_at — see accounts/models.py). Skill tags are
-// free-text strings on submit; the backend canonicalizes them against its
-// own Skill catalog (case-insensitive match-or-create).
-const SKILL_OPTIONS = [
-  "Backend", "Frontend", "Full-stack", "DevOps", "Mobile",
-  "Data / ML", "QA / Testing", "UI/UX Design",
-];
-
 export default function CandidateOnboarding() {
   const navigate = useNavigate();
   const { user, setSession } = useAuth();
   const [step, setStep] = useState(1);
+
   const [resumeFile, setResumeFile] = useState(null);
-  const [skills, setSkills] = useState([]);
+
+  // Driven by the backend's missing_fields, not re-derived locally — it's
+  // auth_provider-aware server-side (a Google signup may lack phone and/or
+  // full_name; an email/password signup collected both at signup and will
+  // never have either listed here).
+  const missingFields = user?.missing_fields || [];
+  const phoneRequired = missingFields.includes("phone");
+  const nameRequired = missingFields.includes("full_name");
+
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [fullName, setFullName] = useState(user?.full_name || "");
+
+  const [skillCatalog, setSkillCatalog] = useState([]);
+  const [catalogError, setCatalogError] = useState("");
+  const [selectedSkillIds, setSelectedSkillIds] = useState([]);
+
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const totalSteps = 2;
 
-  function toggleSkill(skill) {
-    setSkills((prev) =>
-      prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]
+  useEffect(() => {
+    getSkillCatalog()
+      .then(setSkillCatalog)
+      .catch(() => setCatalogError("Couldn't load the skills list. Try refreshing."));
+  }, []);
+
+  function toggleSkill(id) {
+    setSelectedSkillIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
   }
 
@@ -48,11 +62,32 @@ export default function CandidateOnboarding() {
     setResumeFile(file);
   }
 
-  // Sends only whatever the candidate actually provided this run — a PATCH
-  // with just cv, just skills, both, or (if both were skipped) no call at
-  // all. The backend's write serializer accepts partial data via PATCH.
+  // The one gate both Continue and Skip run through on step 1 — resume
+  // stays optional either way, phone and full name (when the backend says
+  // they're missing) are not.
+  function checkRequiredBeforeLeavingStep1() {
+    if (phoneRequired && !phone.trim()) {
+      setError("Add a phone number so employers can reach you.");
+      return false;
+    }
+    if (nameRequired && !fullName.trim()) {
+      setError("Add your full name to continue.");
+      return false;
+    }
+    return true;
+  }
+
+  // Sends only whatever the candidate actually provided this run. The
+  // backend's write serializer accepts partial data via PATCH, but
+  // onboarding always has at least a resume, skills, or a first-time
+  // phone/name once it gets here, so PUT-shaped (full submission) is fine
+  // for the common case; falling through to "nothing to send" only
+  // happens if nothing required was outstanding and both steps were
+  // skipped outright.
   async function submitProfile() {
-    if (!resumeFile && skills.length === 0) {
+    const hasPhoneUpdate = phoneRequired && phone.trim();
+    const hasNameUpdate = nameRequired && fullName.trim();
+    if (!resumeFile && selectedSkillIds.length === 0 && !hasPhoneUpdate && !hasNameUpdate) {
       navigate("/dashboard");
       return;
     }
@@ -62,13 +97,12 @@ export default function CandidateOnboarding() {
     try {
       const formData = new FormData();
       if (resumeFile) formData.append("cv", resumeFile);
-      skills.forEach((skill) => formData.append("skills", skill));
+      selectedSkillIds.forEach((id) => formData.append("skills", id));
+      if (hasPhoneUpdate) formData.append("phone", phone.trim());
+      if (hasNameUpdate) formData.append("full_name", fullName.trim());
 
       const profile = await updateMyProfile(formData);
 
-      // Keep the cached user in sync so Dashboard's "profile incomplete"
-      // banner and any resume_url check reflect this save immediately,
-      // without waiting for the next login.
       const token = localStorage.getItem("skillbridge_access_token");
       setSession({ ...user, ...profile }, token);
 
@@ -81,25 +115,31 @@ export default function CandidateOnboarding() {
   }
 
   function handleContinue() {
-    if (step === 1 && !resumeFile) {
-      setError("Upload a resume to continue, or skip for now.");
+    if (step === 1) {
+      if (!resumeFile) {
+        setError("Upload a resume to continue, or skip for now.");
+        return;
+      }
+      if (!checkRequiredBeforeLeavingStep1()) return;
+      setError("");
+      setStep(2);
       return;
     }
     setError("");
-    if (step < totalSteps) {
-      setStep(step + 1);
-    } else {
-      submitProfile();
-    }
+    submitProfile();
   }
 
   function handleSkip() {
-    setError("");
-    if (step < totalSteps) {
-      setStep(step + 1);
-    } else {
-      submitProfile();
+    if (step === 1) {
+      // Resume is skippable, phone/full name (when required) are not —
+      // same gate as Continue, minus the resume requirement.
+      if (!checkRequiredBeforeLeavingStep1()) return;
+      setError("");
+      setStep(2);
+      return;
     }
+    setError("");
+    submitProfile();
   }
 
   return (
@@ -145,6 +185,44 @@ export default function CandidateOnboarding() {
                   onChange={handleFileChange}
                 />
               </label>
+
+              {nameRequired && (
+                <div className="mt-6">
+                  <label htmlFor="fullName" className="text-xs font-semibold text-slate uppercase tracking-wide block mb-1.5">
+                    Full name
+                  </label>
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="e.g. Ayesha Khan"
+                    className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-brass"
+                  />
+                  <p className="text-xs text-slate mt-1.5">
+                    So employers know who they're talking to.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-6">
+                <label htmlFor="phone" className="text-xs font-semibold text-slate uppercase tracking-wide block mb-1.5">
+                  Phone number{phoneRequired ? "" : " (on file)"}
+                </label>
+                <input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. 03xx xxxxxxx"
+                  className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-brass"
+                />
+                {phoneRequired && (
+                  <p className="text-xs text-slate mt-1.5">
+                    Needed so employers can reach you about an interview.
+                  </p>
+                )}
+              </div>
             </>
           )}
 
@@ -155,21 +233,23 @@ export default function CandidateOnboarding() {
                 Pick a few — this just shapes which guaranteed-slot roles we surface first.
               </p>
 
+              {catalogError && <p className="text-danger text-xs mb-4">{catalogError}</p>}
+
               <div className="flex flex-wrap gap-2">
-                {SKILL_OPTIONS.map((skill) => {
-                  const active = skills.includes(skill);
+                {skillCatalog.map((skill) => {
+                  const active = selectedSkillIds.includes(skill.id);
                   return (
                     <button
-                      key={skill}
+                      key={skill.id}
                       type="button"
-                      onClick={() => toggleSkill(skill)}
+                      onClick={() => toggleSkill(skill.id)}
                       className={`px-3.5 py-2 rounded-full text-sm font-medium border transition-colors ${
                         active
                           ? "bg-ink text-white border-ink"
                           : "bg-surface text-ink border-line hover:border-brass"
                       }`}
                     >
-                      {skill}
+                      {skill.name}
                     </button>
                   );
                 })}

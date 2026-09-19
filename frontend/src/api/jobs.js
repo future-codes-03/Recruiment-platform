@@ -21,6 +21,15 @@ export async function getPublicJob(jobId) {
   return data; // Job
 }
 
+// GET /me/jobs — same shape as /public/jobs, pre-filtered server-side to
+// jobs matching the candidate's saved skill ids. Auth required; only call
+// this for a logged-in candidate who actually has skills on file, since an
+// empty skill list makes the filter a no-op equivalent to /public/jobs.
+export async function listMatchedJobs({ page } = {}) {
+  const { data } = await api.get("/me/jobs", { params: { page } });
+  return data; // { results, count }
+}
+
 export async function createJob(job) {
   const { data } = await api.post("/jobs", job);
   return data; // Job

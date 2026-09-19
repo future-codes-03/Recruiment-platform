@@ -61,6 +61,9 @@ function JobDetail() {
         <Link to="/jobs" className="text-xs font-bold text-slate hover:text-ink">← Back to open roles</Link>
 
         <h1 className="text-2xl sm:text-3xl font-bold text-ink mt-4 mb-1">{job.title}</h1>
+        {job.company_name && (
+          <p className="text-sm text-slate mb-1">{job.company_name}</p>
+        )}
         <p className="text-sm text-slate mb-6">
           {slotsOpen > 0
             ? `${slotsOpen} of ${job.guaranteed_slots} guaranteed slots still open`

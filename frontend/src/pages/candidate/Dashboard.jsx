@@ -2,13 +2,52 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import Header from '../../components/candidate/Header'
 import { Card, ProgressBar, Badge, EmptyState } from '../../components/shared'
-import { listPublicJobs } from '../../api/jobs'
+import { listPublicJobs, listMatchedJobs } from '../../api/jobs'
 import { useAuth } from '../../context/AuthContext'
+
+function JobCard({ job }) {
+  return (
+    <Card>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex-1">
+          <h3 className="text-base font-bold text-ink mb-0.5">{job.title}</h3>
+          {job.company_name && (
+            <p className="text-xs text-slate mb-2">{job.company_name}</p>
+          )}
+
+          {job.skill_requirements?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {job.skill_requirements.map((s) => (
+                <Badge key={s.skill_name}>{s.skill_name}</Badge>
+              ))}
+            </div>
+          )}
+
+          <ProgressBar value={job.slots_filled} max={job.guaranteed_slots} />
+          <p className="text-xs text-slate mt-1.5">
+            {job.guaranteed_slots - job.slots_filled} of {job.guaranteed_slots} guaranteed slots still open
+          </p>
+        </div>
+        <Link
+          to={`/jobs/${job.id}`}
+          className="text-sm font-bold text-brass hover:underline whitespace-nowrap sm:self-start"
+        >
+          View role
+        </Link>
+      </div>
+    </Card>
+  )
+}
 
 function Dashboard() {
   const { user } = useAuth()
+  const hasSkills = Boolean(user?.skills?.length)
+
   const [jobs, setJobs] = useState(null) // null = still loading
   const [error, setError] = useState('')
+
+  const [matchedJobs, setMatchedJobs] = useState(null)
+  const [matchedError, setMatchedError] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -26,7 +65,22 @@ function Dashboard() {
     }
   }, [])
 
-  const hasResume = Boolean(user?.resume_url)
+  useEffect(() => {
+    if (!hasSkills) return
+    let cancelled = false
+    listMatchedJobs()
+      .then((data) => {
+        if (!cancelled) setMatchedJobs(data.results)
+      })
+      .catch(() => {
+        if (!cancelled) setMatchedError("Couldn't load matched roles.")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hasSkills])
+
+  const profileIncomplete = !user?.profile_complete
 
   return (
     <div className="min-h-screen bg-paper">
@@ -37,7 +91,7 @@ function Dashboard() {
           Welcome{user?.full_name ? `, ${user.full_name.split(' ')[0]}` : ''}
         </h1>
 
-        {!hasResume && (
+        {profileIncomplete && (
           <Card className="mb-8 flex flex-wrap items-center justify-between gap-4 bg-brass-light/50 border border-brass/30">
             <div>
               <p className="text-sm font-bold text-ink">Your profile is incomplete</p>
@@ -49,8 +103,35 @@ function Dashboard() {
           </Card>
         )}
 
+        {hasSkills && (
+          <div className="mb-10">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className="text-lg font-bold text-ink">Matched to your skills</h2>
+            </div>
+
+            {matchedError && <Card className="mb-6 text-danger text-sm">{matchedError}</Card>}
+
+            {matchedJobs === null && !matchedError && (
+              <p className="text-sm text-slate">Loading matched roles...</p>
+            )}
+
+            {matchedJobs?.length === 0 && (
+              <Card>
+                <EmptyState
+                  title="No matches yet"
+                  message="Nothing published right now matches your skills — check back soon, or browse everything below."
+                />
+              </Card>
+            )}
+
+            <div className="flex flex-col gap-4">
+              {matchedJobs?.map((job) => <JobCard key={job.id} job={job} />)}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="text-lg font-bold text-ink">Open roles with guaranteed slots</h2>
+          <h2 className="text-lg font-bold text-ink">All open roles</h2>
         </div>
 
         {error && <Card className="mb-6 text-danger text-sm">{error}</Card>}
@@ -69,34 +150,7 @@ function Dashboard() {
         )}
 
         <div className="flex flex-col gap-4">
-          {jobs?.map((job) => (
-            <Card key={job.id}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-ink mb-2">{job.title}</h3>
-
-                  {job.skill_requirements?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {job.skill_requirements.map((s) => (
-                        <Badge key={s.skill_name}>{s.skill_name}</Badge>
-                      ))}
-                    </div>
-                  )}
-
-                  <ProgressBar value={job.slots_filled} max={job.guaranteed_slots} />
-                  <p className="text-xs text-slate mt-1.5">
-                    {job.guaranteed_slots - job.slots_filled} of {job.guaranteed_slots} guaranteed slots still open
-                  </p>
-                </div>
-                <Link
-                  to={`/jobs/${job.id}`}
-                  className="text-sm font-bold text-brass hover:underline whitespace-nowrap sm:self-start"
-                >
-                  View role
-                </Link>
-              </div>
-            </Card>
-          ))}
+          {jobs?.map((job) => <JobCard key={job.id} job={job} />)}
         </div>
       </div>
     </div>

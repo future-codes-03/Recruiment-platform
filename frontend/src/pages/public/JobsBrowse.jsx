@@ -55,7 +55,10 @@ function JobsBrowse() {
             <Card key={job.id}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex-1">
-                  <h3 className="text-base font-bold text-ink mb-2">{job.title}</h3>
+                  <h3 className="text-base font-bold text-ink mb-0.5">{job.title}</h3>
+                  {job.company_name && (
+                    <p className="text-xs text-slate mb-2">{job.company_name}</p>
+                  )}
 
                   {job.skill_requirements?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-3">

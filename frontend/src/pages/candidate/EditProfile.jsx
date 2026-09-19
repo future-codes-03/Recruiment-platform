@@ -1,16 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { getMyProfile, patchMyProfile } from "../../api/profile";
+import { getMyProfile, patchMyProfile, deleteMyResume, deleteMyPhone } from "../../api/profile";
+import { getSkillCatalog } from "../../api/skills";
 import { getErrorMessage } from "../../api/errors";
 import Header from "../../components/candidate/Header";
 import Button from "../../components/shared/Button";
 import Card from "../../components/shared/Card";
-
-const SKILL_OPTIONS = [
-  "Backend", "Frontend", "Full-stack", "DevOps", "Mobile",
-  "Data / ML", "QA / Testing", "UI/UX Design",
-];
 
 export default function EditProfile() {
   const navigate = useNavigate();
@@ -21,19 +17,37 @@ export default function EditProfile() {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
 
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [initialFullName, setInitialFullName] = useState("");
+  const [initialPhone, setInitialPhone] = useState("");
+
   const [resumeUrl, setResumeUrl] = useState(null);
   const [newResumeFile, setNewResumeFile] = useState(null);
-  const [skills, setSkills] = useState([]);
-  const [initialSkills, setInitialSkills] = useState([]);
+  const [confirmingResumeDelete, setConfirmingResumeDelete] = useState(false);
+  const [deletingResume, setDeletingResume] = useState(false);
+
+  const [confirmingPhoneDelete, setConfirmingPhoneDelete] = useState(false);
+  const [deletingPhone, setDeletingPhone] = useState(false);
+
+  const [skillCatalog, setSkillCatalog] = useState([]);
+  const [selectedSkillIds, setSelectedSkillIds] = useState([]);
+  const [initialSkillIds, setInitialSkillIds] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
-    getMyProfile()
-      .then((profile) => {
+    Promise.all([getMyProfile(), getSkillCatalog()])
+      .then(([profile, catalog]) => {
         if (cancelled) return;
         setResumeUrl(profile.resume_url || null);
-        setSkills(profile.skills || []);
-        setInitialSkills(profile.skills || []);
+        setFullName(profile.full_name || "");
+        setInitialFullName(profile.full_name || "");
+        setPhone(profile.phone || "");
+        setInitialPhone(profile.phone || "");
+        const ids = (profile.skills || []).map((s) => s.id);
+        setSelectedSkillIds(ids);
+        setInitialSkillIds(ids);
+        setSkillCatalog(catalog);
       })
       .catch(() => {
         if (!cancelled) setError("Couldn't load your profile. Try refreshing.");
@@ -44,9 +58,9 @@ export default function EditProfile() {
     };
   }, []);
 
-  function toggleSkill(skill) {
-    setSkills((prev) =>
-      prev.includes(skill) ? prev.filter((s) => s !== skill) : [...prev, skill]
+  function toggleSkill(id) {
+    setSelectedSkillIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
   }
 
@@ -65,12 +79,50 @@ export default function EditProfile() {
     setNewResumeFile(file);
   }
 
+  function applyProfile(profile) {
+    const token = localStorage.getItem("skillbridge_access_token");
+    setSession({ ...user, ...profile }, token);
+    setResumeUrl(profile.resume_url || null);
+    setPhone(profile.phone || "");
+    setInitialPhone(profile.phone || "");
+  }
+
+  async function handleDeleteResume() {
+    setDeletingResume(true);
+    setError("");
+    try {
+      const profile = await deleteMyResume();
+      applyProfile(profile);
+      setConfirmingResumeDelete(false);
+    } catch (err) {
+      setError(getErrorMessage(err, "Couldn't remove your resume. Please try again."));
+    } finally {
+      setDeletingResume(false);
+    }
+  }
+
+  async function handleDeletePhone() {
+    setDeletingPhone(true);
+    setError("");
+    try {
+      const profile = await deleteMyPhone();
+      applyProfile(profile);
+      setConfirmingPhoneDelete(false);
+    } catch (err) {
+      setError(getErrorMessage(err, "Couldn't remove your phone number. Please try again."));
+    } finally {
+      setDeletingPhone(false);
+    }
+  }
+
   const skillsChanged =
-    skills.length !== initialSkills.length ||
-    skills.some((s) => !initialSkills.includes(s));
+    selectedSkillIds.length !== initialSkillIds.length ||
+    selectedSkillIds.some((id) => !initialSkillIds.includes(id));
+  const nameChanged = fullName.trim() !== initialFullName;
+  const phoneChanged = phone.trim() !== initialPhone;
 
   async function handleSave() {
-    if (!newResumeFile && !skillsChanged) {
+    if (!newResumeFile && !skillsChanged && !nameChanged && !phoneChanged) {
       navigate("/dashboard");
       return;
     }
@@ -82,18 +134,22 @@ export default function EditProfile() {
       const formData = new FormData();
       if (newResumeFile) formData.append("cv", newResumeFile);
       // Skills is a .set() on the backend, not an append — always send the
-      // full current list when it's changed, not just what's new.
+      // full current selection when it's changed, not just what's new.
       if (skillsChanged) {
-        skills.forEach((skill) => formData.append("skills", skill));
+        selectedSkillIds.forEach((id) => formData.append("skills", id));
       }
+      if (nameChanged) formData.append("full_name", fullName.trim());
+      // Clearing the phone field to blank and saving here would just error
+      // — the backend rejects a blank phone on PATCH. Use "Remove" instead.
+      if (phoneChanged && phone.trim()) formData.append("phone", phone.trim());
 
       const profile = await patchMyProfile(formData);
 
-      const token = localStorage.getItem("skillbridge_access_token");
-      setSession({ ...user, ...profile }, token);
-
-      setResumeUrl(profile.resume_url || null);
-      setInitialSkills(profile.skills || []);
+      applyProfile(profile);
+      setInitialFullName(profile.full_name || "");
+      const ids = (profile.skills || []).map((s) => s.id);
+      setSelectedSkillIds(ids);
+      setInitialSkillIds(ids);
       setNewResumeFile(null);
       setSaved(true);
     } catch (err) {
@@ -121,8 +177,73 @@ export default function EditProfile() {
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
         <h1 className="text-2xl font-bold text-ink mb-1">Edit profile</h1>
         <p className="text-sm text-slate mb-8">
-          Update your resume or the skills you're being matched on.
+          Update your details, resume, or the skills you're being matched on.
         </p>
+
+        <Card className="mb-6">
+          <h2 className="text-[11px] uppercase tracking-widelabel text-slate font-bold mb-4">
+            Account details
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="fullName" className="text-xs font-semibold text-slate uppercase tracking-wide block mb-1.5">
+                Full name
+              </label>
+              <input
+                id="fullName"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-brass"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="editPhone" className="text-xs font-semibold text-slate uppercase tracking-wide">
+                  Phone number
+                </label>
+                {initialPhone && !confirmingPhoneDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingPhoneDelete(true)}
+                    className="text-xs font-medium text-danger hover:underline"
+                  >
+                    Remove
+                  </button>
+                )}
+                {confirmingPhoneDelete && (
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate">Remove your phone number?</span>
+                    <button
+                      type="button"
+                      onClick={handleDeletePhone}
+                      disabled={deletingPhone}
+                      className="text-xs font-semibold text-danger hover:underline disabled:opacity-50"
+                    >
+                      {deletingPhone ? "Removing..." : "Confirm"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingPhoneDelete(false)}
+                      disabled={deletingPhone}
+                      className="text-xs font-medium text-slate hover:text-ink"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+              </div>
+              <input
+                id="editPhone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. 03xx xxxxxxx"
+                className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-brass"
+              />
+            </div>
+          </div>
+        </Card>
 
         <Card className="mb-6">
           <h2 className="text-[11px] uppercase tracking-widelabel text-slate font-bold mb-4">
@@ -130,14 +251,46 @@ export default function EditProfile() {
           </h2>
 
           {resumeUrl && !newResumeFile && (
-            
-              <a href={resumeUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="text-sm font-semibold text-brass-dark hover:underline block mb-4"
-            >
-              View current resume ↗
-            </a>
+            <div className="flex items-center justify-between mb-4">
+              <a
+                href={resumeUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-semibold text-brass-dark hover:underline"
+              >
+                View current resume ↗
+              </a>
+
+              {!confirmingResumeDelete ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingResumeDelete(true)}
+                  className="text-sm font-medium text-danger hover:underline"
+                >
+                  Remove
+                </button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate">Remove your resume?</span>
+                  <button
+                    type="button"
+                    onClick={handleDeleteResume}
+                    disabled={deletingResume}
+                    className="text-sm font-semibold text-danger hover:underline disabled:opacity-50"
+                  >
+                    {deletingResume ? "Removing..." : "Confirm"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingResumeDelete(false)}
+                    disabled={deletingResume}
+                    className="text-sm font-medium text-slate hover:text-ink"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
           <label
@@ -172,20 +325,20 @@ export default function EditProfile() {
             Skills
           </h2>
           <div className="flex flex-wrap gap-2">
-            {SKILL_OPTIONS.map((skill) => {
-              const active = skills.includes(skill);
+            {skillCatalog.map((skill) => {
+              const active = selectedSkillIds.includes(skill.id);
               return (
                 <button
-                  key={skill}
+                  key={skill.id}
                   type="button"
-                  onClick={() => toggleSkill(skill)}
+                  onClick={() => toggleSkill(skill.id)}
                   className={`px-3.5 py-2 rounded-full text-sm font-medium border transition-colors ${
                     active
                       ? "bg-ink text-white border-ink"
                       : "bg-surface text-ink border-line hover:border-brass"
                   }`}
                 >
-                  {skill}
+                  {skill.name}
                 </button>
               );
             })}

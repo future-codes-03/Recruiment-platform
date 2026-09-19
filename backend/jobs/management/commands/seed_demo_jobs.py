@@ -11,7 +11,6 @@ from company.models import Company
 from jobs.models import GuaranteeAgreement, Job, JobSeniority, JobSkillRequirement, JobStatus, Skill
 
 User = get_user_model()
-
 JOBS = [
     {
         'title': 'Backend Engineer',
@@ -26,10 +25,10 @@ JOBS = [
         'overall_min_score': Decimal('65.00'),
         'status': JobStatus.DRAFT,
         'skills': [
-            # (name, min_score, weight_pct)
-            ('Python', Decimal('65.00'), Decimal('50.00')),
-            ('Django', Decimal('60.00'), Decimal('30.00')),
-            ('PostgreSQL', Decimal('55.00'), Decimal('20.00')),
+            # (name, min_score, weight_pct) — names must match the catalog
+            # in jobs/migrations/0004 exactly (case-sensitive lookup).
+            ('Backend', Decimal('65.00'), Decimal('70.00')),
+            ('DevOps', Decimal('55.00'), Decimal('30.00')),
         ],
     },
     {
@@ -44,9 +43,53 @@ JOBS = [
         'overall_min_score': Decimal('65.00'),
         'status': JobStatus.PUBLISHED,
         'skills': [
-            ('React', Decimal('60.00'), Decimal('50.00')),
-            ('TypeScript', Decimal('60.00'), Decimal('30.00')),
-            ('CSS', Decimal('55.00'), Decimal('20.00')),
+            ('Frontend', Decimal('60.00'), Decimal('80.00')),
+            ('UI/UX Design', Decimal('55.00'), Decimal('20.00')),
+        ],
+    },
+    {
+        'title': 'Full-Stack Developer',
+        'description': (
+            'Work across the whole stack — Django API endpoints one day, React '
+            'components the next. A generalist role for someone comfortable '
+            'moving between the two.'
+        ),
+        'seniority': JobSeniority.JUNIOR,
+        'guaranteed_slots': 8,
+        'overall_min_score': Decimal('60.00'),
+        'status': JobStatus.PUBLISHED,
+        'skills': [
+            ('Full-Stack', Decimal('60.00'), Decimal('60.00')),
+            ('Backend', Decimal('55.00'), Decimal('25.00')),
+            ('Frontend', Decimal('55.00'), Decimal('15.00')),
+        ],
+    },
+    {
+        'title': 'QA Engineer',
+        'description': (
+            'Own test coverage across the platform — manual test plans for now, '
+            'automated regression suites as the codebase matures.'
+        ),
+        'seniority': JobSeniority.ENTRY_LEVEL,
+        'guaranteed_slots': 3,
+        'overall_min_score': Decimal('55.00'),
+        'status': JobStatus.PUBLISHED,
+        'skills': [
+            ('QA / Testing', Decimal('60.00'), Decimal('100.00')),
+        ],
+    },
+    {
+        'title': 'Mobile Developer',
+        'description': (
+            'Build the mobile companion app once the core web platform '
+            'stabilizes. React Native preferred, native experience considered.'
+        ),
+        'seniority': JobSeniority.MID,
+        'guaranteed_slots': 4,
+        'overall_min_score': Decimal('65.00'),
+        'status': JobStatus.DRAFT,
+        'skills': [
+            ('Mobile', Decimal('65.00'), Decimal('100.00')),
         ],
     },
 ]
