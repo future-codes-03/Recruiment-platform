@@ -1,5 +1,4 @@
 from datetime import timedelta
-
 import cloudinary.uploader
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
@@ -23,7 +22,7 @@ from company.models import Company
 from jobs.models import Skill
 from jobs.serializers import SkillSerializer
 
-from .models import User, UserRole
+from .models import AuthProvider, User, UserRole
 
 # Free consumer email providers rejected on company signup — an admin_email
 # must belong to the company's own domain.
@@ -138,6 +137,30 @@ class CompanySerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+# What a candidate must supply before the profile-completion gate lets them
+# through. Every candidate owes a CV and skills; a Google signup additionally
+# owes a phone number and a full name, because Google's id_token carries
+# neither reliably and there was no signup form to collect them.
+def required_profile_fields(user):
+    fields = ['resume_url', 'skills']
+    if user.auth_provider == AuthProvider.GOOGLE:
+        fields += ['phone', 'full_name']
+    return fields
+
+
+# Always derived from current state, never latched: deleting the CV or the
+# phone number puts the field back on this list and re-gates the candidate,
+# the same way CV deletion already flips profile_complete back to false.
+def compute_missing_profile_fields(user):
+    present = {
+        'resume_url': bool(user.resume_url),
+        'skills': user.skills.exists(),
+        'phone': bool(user.phone.strip()),
+        'full_name': bool(user.full_name.strip()),
+    }
+    return [field for field in required_profile_fields(user) if not present[field]]
+
+
 class CandidateProfileSerializer(serializers.ModelSerializer):
     # Full {id, slug, name} objects rather than bare names: the onboarding
     # picker pre-selects a candidate's saved skills by id, and resolving
@@ -145,32 +168,65 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
     # name-matching fragility the catalog exists to remove.
     skills = SkillSerializer(many=True, read_only=True)
     profile_complete = serializers.SerializerMethodField()
+    # Which fields are still outstanding, so the client can render the
+    # completion page without re-deriving the rule itself.
+    missing_fields = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['resume_url', 'cv_uploaded_at', 'skills', 'profile_complete']
+        fields = [
+            'resume_url', 'cv_uploaded_at', 'skills', 'phone', 'full_name',
+            'auth_provider', 'profile_complete', 'missing_fields',
+        ]
         read_only_fields = fields
 
     def get_profile_complete(self, obj):
-        return bool(obj.resume_url) and obj.skills.exists()
+        return not compute_missing_profile_fields(obj)
+
+    def get_missing_fields(self, obj):
+        return compute_missing_profile_fields(obj)
 
 
 MAX_CV_SIZE_BYTES = 5 * 1024 * 1024  # 5MB — not specified anywhere, a reasonable default
 
 
 class CandidateProfileWriteSerializer(serializers.Serializer):
-    # required=True here is the PUT ("full submission") contract; a PATCH
-    # instantiates this same class with partial=True, which DRF
-    # automatically relaxes to optional for every field.
-    cv = serializers.FileField(required=True)
+    # Every field is declared optional and the PUT ("full submission")
+    # contract is enforced in validate() instead, against
+    # required_profile_fields(). Two reasons it can't be a field-level
+    # required=True any more: the required set now depends on the user's
+    # auth_provider, and "required" means "non-empty *after* this write" —
+    # a Google candidate who already uploaded a CV must be able to PUT just
+    # their phone number without re-uploading it.
+    cv = serializers.FileField(required=False)
     # Catalog ids only — never free text. An id that isn't in the Skill
     # table is a 400 from DRF, so the API can't grow "React" alongside
     # "react.js" even if a client bypasses the frontend picker. This is the
     # enforcement; the picker is only the convenience.
     skills = serializers.PrimaryKeyRelatedField(
         many=True, queryset=Skill.objects.all(),
-        required=True, allow_empty=False,
+        required=False, allow_empty=False,
     )
+    # No format/regex validation: nothing in this codebase validates a phone
+    # number's shape (CandidateSignupSerializer.phone is a bare CharField),
+    # and no canonical source specifies one. Non-empty after strip is the
+    # whole rule — see the spec's open questions before adding more.
+    phone = serializers.CharField(max_length=20, required=False)
+    # min_length matches the full_name rule already used by
+    # CandidateSignupSerializer and CompanySignupSerializer.
+    full_name = serializers.CharField(max_length=255, min_length=2, required=False)
+
+    def validate_phone(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Phone number cannot be blank.')
+        return value
+
+    def validate_full_name(self, value):
+        value = value.strip()
+        if len(value) < 2:
+            raise serializers.ValidationError('Full name must be at least 2 characters.')
+        return value
 
     def validate_cv(self, value):
         if not value.name.lower().endswith('.pdf'):
@@ -180,10 +236,38 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs):
-        # On a PATCH, DRF simply omits untouched optional fields from
-        # attrs — guard against a PATCH that supplies neither field.
-        if self.partial and not attrs:
-            raise serializers.ValidationError('At least one of cv or skills must be provided.')
+        # A PATCH is an edit from profile settings, not an attempt to satisfy
+        # the gate — it enforces no required set, only that it does something.
+        if self.partial:
+            if not attrs:
+                raise serializers.ValidationError(
+                    'At least one of cv, skills, phone or full_name must be provided.'
+                )
+            return attrs
+
+        # A PUT is the full first-time submission. A required field counts as
+        # satisfied if this request supplies it OR the user already has it —
+        # so re-submitting only what's missing is allowed.
+        user = self.context['request'].user
+        already_present = {
+            'resume_url': bool(user.resume_url),
+            'skills': user.skills.exists(),
+            'phone': bool(user.phone.strip()),
+            'full_name': bool(user.full_name.strip()),
+        }
+        # The write serializer names the CV field 'cv'; the user attribute it
+        # lands in is 'resume_url'.
+        supplied_by = {'resume_url': 'cv', 'skills': 'skills', 'phone': 'phone', 'full_name': 'full_name'}
+
+        # Keyed by the request field name, not the model attribute, so DRF
+        # renders it as an error against the input the client actually sends.
+        missing = {
+            supplied_by[field]: ['This field is required to complete your profile.']
+            for field in required_profile_fields(user)
+            if supplied_by[field] not in attrs and not already_present[field]
+        }
+        if missing:
+            raise serializers.ValidationError(missing)
         return attrs
 
     def save(self, **kwargs):
@@ -193,6 +277,10 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
         # linking them to catalog skills, so wrap in transaction.atomic()
         # per backend/CLAUDE.md's rule for multi-row writes.
         with transaction.atomic():
+            # One save() for every scalar field this request touched, rather
+            # than one per field — update_fields is built up as we go.
+            update_fields = []
+
             if 'cv' in self.validated_data:
                 upload = cloudinary.uploader.upload(
                     self.validated_data['cv'],
@@ -203,7 +291,18 @@ class CandidateProfileWriteSerializer(serializers.Serializer):
                 )
                 user.resume_url = upload['secure_url']
                 user.cv_uploaded_at = timezone.now()
-                user.save(update_fields=['resume_url', 'cv_uploaded_at'])
+                update_fields += ['resume_url', 'cv_uploaded_at']
+
+            if 'phone' in self.validated_data:
+                user.phone = self.validated_data['phone']
+                update_fields.append('phone')
+
+            if 'full_name' in self.validated_data:
+                user.full_name = self.validated_data['full_name']
+                update_fields.append('full_name')
+
+            if update_fields:
+                user.save(update_fields=update_fields)
 
             if 'skills' in self.validated_data:
                 # PrimaryKeyRelatedField has already resolved these to real
@@ -370,12 +469,17 @@ def get_or_create_google_user(raw_id_token):
         user = User.objects.create_user(
             email=email,
             password=None,
-            full_name=claims.get('name') or email,
+            # '' rather than falling back to the email address: an empty name
+            # is a fact the completion gate can act on, whereas a full_name
+            # that happens to be an email address is indistinguishable from a
+            # real one once stored.
+            full_name=claims.get('name') or '',
             role=UserRole.CANDIDATE,
         )
         user.set_unusable_password()
         user.email_verified_at = timezone.now()
-        user.save(update_fields=['password', 'email_verified_at'])
+        user.auth_provider = AuthProvider.GOOGLE
+        user.save(update_fields=['password', 'email_verified_at', 'auth_provider'])
         created = True
     elif user.role != UserRole.CANDIDATE:
         # Candidate-only by design — an email that already belongs to a
@@ -384,18 +488,27 @@ def get_or_create_google_user(raw_id_token):
         # on the frontend only rendering this button for candidates.
         raise AuthenticationFailed(GOOGLE_AUTH_FAILURE_MESSAGE)
     # else: matched an existing candidate account (however it was originally
-    # created) — log in as-is. No is_active/email_verified_at re-check here,
+    # created) — log in as-is, auth_provider included. Using the Google button
+    # once must not reclassify an email/password account as a Google one, or
+    # it would start demanding fields that account already collected at
+    # signup. No is_active/email_verified_at re-check here,
     # unlike LoginSerializer: Google already vouches for the email, and a
     # password-created candidate account's email_verified_at guard is a
     # different check than what this endpoint is verifying.
 
     refresh = RefreshToken.for_user(user)
+    # Surfaced at sign-in so the client can route a Google candidate straight
+    # to the profile-completion page without a second round-trip to
+    # GET /me/profile.
+    missing_fields = compute_missing_profile_fields(user)
     return {
         'access_token': str(refresh.access_token),
         'refresh_token': str(refresh),
         'expires_in': int(jwt_settings.ACCESS_TOKEN_LIFETIME.total_seconds()),
         'user': user,
         'created': created,
+        'missing_fields': missing_fields,
+        'profile_complete': not missing_fields,
     }
 
 

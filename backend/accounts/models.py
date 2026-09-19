@@ -14,6 +14,11 @@ class UserRole(models.TextChoices):
     CANDIDATE = 'candidate', 'Candidate'
 
 
+class AuthProvider(models.TextChoices):
+    EMAIL = 'email', 'Email'
+    GOOGLE = 'google', 'Google'
+
+
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -39,7 +44,18 @@ class User(AbstractBaseUser, PermissionsMixin, BaseModel):
     role = models.CharField(max_length=20, choices=UserRole.choices)
     email = models.EmailField()
     phone = models.CharField(max_length=20, blank=True)
-    full_name = models.CharField(max_length=255)
+    # blank=True: Google's id_token doesn't always carry a `name` claim, and
+    # get_or_create_google_user() stores '' rather than falling back to the
+    # email address — so an empty name is a legal state the profile-completion
+    # gate then asks the candidate to fill, not a placeholder to guess at later.
+    full_name = models.CharField(max_length=255, blank=True)
+    # How the account was created. Scopes the profile-completion gate: a Google
+    # signup supplies no phone (and possibly no name), so those are required
+    # before the candidate can proceed; an email/password signup collected them
+    # at signup and is held to the pre-existing CV + skills bar only.
+    auth_provider = models.CharField(
+        max_length=20, choices=AuthProvider.choices, default=AuthProvider.EMAIL
+    )
     resume_url = models.URLField(max_length=500, blank=True)
     cv_uploaded_at = models.DateTimeField(null=True, blank=True)
     # 'jobs.Skill' as a string, not a direct import — mirrors how jobs/models.py

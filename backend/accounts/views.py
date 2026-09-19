@@ -110,6 +110,12 @@ class GoogleLoginView(APIView):
                 'refresh_token': data['refresh_token'],
                 'expires_in': data['expires_in'],
                 'user': UserSerializer(data['user']).data,
+                # Siblings of 'user', not fields on UserSerializer — that
+                # serializer is shared with company signup and email/password
+                # login, where a candidate-only completeness flag is
+                # meaningless.
+                'profile_complete': data['profile_complete'],
+                'missing_fields': data['missing_fields'],
             },
             status=status.HTTP_201_CREATED if data['created'] else status.HTTP_200_OK,
         )
@@ -280,4 +286,33 @@ class CandidateCVDeleteView(APIView):
         user.resume_url = ''
         user.cv_uploaded_at = None
         user.save(update_fields=['resume_url', 'cv_uploaded_at'])
+        return Response(CandidateProfileSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class CandidatePhoneDeleteView(APIView):
+    """
+    DELETE /api/v1/me/profile/phone — removes the candidate's phone number.
+    Candidate-only; identifies the user from the access token, never a
+    submitted user_id. No external-service cleanup to do, unlike the CV
+    delete — a phone number is a column, not a file.
+
+    For a Google-signup candidate this puts 'phone' back on missing_fields
+    and flips profile_complete to false, re-gating them on next login — the
+    same recompute-every-time behaviour CV deletion already has.
+    """
+    permission_classes = [IsAuthenticated, IsCandidate]
+
+    def delete(self, request):
+        user = request.user
+        if not user.phone.strip():
+            return Response(
+                {
+                    'error_code': 'ERR_PHONE_NOT_FOUND',
+                    'message': 'No phone number on file to delete.',
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user.phone = ''
+        user.save(update_fields=['phone'])
         return Response(CandidateProfileSerializer(user).data, status=status.HTTP_200_OK)
