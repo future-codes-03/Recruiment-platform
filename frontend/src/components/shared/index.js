@@ -4,3 +4,4 @@ export { default as Badge } from "./Badge";
 export { default as ProgressBar } from "./ProgressBar";
 export { default as SlotBox } from "./SlotBox";
 export { default as EmptyState } from "./EmptyState";
+export { default as JobCardSkeleton } from "./JobCardSkeleton";

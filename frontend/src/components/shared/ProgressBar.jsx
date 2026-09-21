@@ -1,6 +1,13 @@
 function ProgressBar({ value = 0, max = 100, label, showValue = false, className = '' }) {
   const percent = Math.min(100, Math.max(0, (value / max) * 100))
 
+  // Every current usage tracks guaranteed-slot claims — a fuller bar means
+  // fewer spots left for a candidate still deciding whether to apply.
+  // Green/amber/red maps directly to "plenty of room" / "filling up" /
+  // "almost gone".
+  const barColor =
+    percent >= 90 ? 'bg-danger' : percent >= 60 ? 'bg-amber-500' : 'bg-success'
+
   return (
     <div className={className}>
       {(label || showValue) && (
@@ -19,7 +26,7 @@ function ProgressBar({ value = 0, max = 100, label, showValue = false, className
       )}
       <div className="h-2 w-full rounded-full bg-slate/20 overflow-hidden">
         <div
-          className="h-full rounded-full bg-brass transition-all duration-300"
+          className={`h-full rounded-full ${barColor} transition-all duration-300`}
           style={{ width: `${percent}%` }}
           role="progressbar"
           aria-valuenow={value}

@@ -1,5 +1,65 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Button from "../../components/shared/Button";
+import { listPublicJobs } from "../../api/jobs";
+
+function StatsBar() {
+  const [stats, setStats] = useState(null); // null = loading/unavailable
+
+  useEffect(() => {
+    let cancelled = false;
+    // Note: sums only the first page of /public/jobs (the API has no
+    // aggregate endpoint yet). Accurate at current scale; if listings ever
+    // exceed one page, this needs a real backend aggregate instead of a
+    // client-side sum over a partial result set.
+    listPublicJobs()
+      .then((data) => {
+        if (cancelled) return;
+        const roles = data.results.length;
+        const slots = data.results.reduce((sum, j) => sum + j.guaranteed_slots, 0);
+        setStats({ roles, slots });
+      })
+      .catch(() => {
+        // Silent — the stats bar just doesn't render rather than showing
+        // an error on a marketing page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!stats || stats.roles === 0) return null;
+
+  return (
+    <div className="border-y border-line bg-card/50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex flex-wrap justify-center gap-x-10 gap-y-3 text-center">
+        <div>
+          <div className="text-xl font-bold text-ink">{stats.roles}</div>
+          <div className="text-xs text-slate">guaranteed-slot roles open now</div>
+        </div>
+        <div>
+          <div className="text-xl font-bold text-ink">{stats.slots}</div>
+          <div className="text-xs text-slate">guaranteed interview slots available</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const VALUE_PROPS = [
+  {
+    title: "A fixed skill bar, published upfront",
+    desc: "Every role's minimum score is set before you start — no moving goalposts, no hidden rubric.",
+  },
+  {
+    title: "No resume screening",
+    desc: "Your assessment result decides whether you qualify — not who reviewed your resume, or when.",
+  },
+  {
+    title: "First to qualify locks the slot",
+    desc: "Guaranteed slots are limited and claimed in order — clear the bar and it's yours.",
+  },
+];
 
 export default function LandingPage() {
   const steps = [
@@ -47,8 +107,6 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Steps panel — same 3-step data as before, shown as a card
-              instead of a horizontal breadcrumb. */}
           <div className="bg-ink rounded-2xl p-6 sm:p-8">
             <div className="text-xs font-semibold text-white/50 uppercase tracking-widelabel mb-5">
               How it works
@@ -75,6 +133,22 @@ export default function LandingPage() {
           </div>
         </div>
       </main>
+
+      <StatsBar />
+
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20">
+        <h2 className="font-display text-2xl sm:text-3xl font-bold text-ink text-center mb-10">
+          Why skillbridge
+        </h2>
+        <div className="grid sm:grid-cols-3 gap-6 sm:gap-8">
+          {VALUE_PROPS.map((v) => (
+            <div key={v.title}>
+              <h3 className="text-sm font-bold text-ink mb-1.5">{v.title}</h3>
+              <p className="text-sm text-slate">{v.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <footer className="border-t border-line text-center py-5 text-xs text-slate">
         About &middot; Pricing &middot; Contact

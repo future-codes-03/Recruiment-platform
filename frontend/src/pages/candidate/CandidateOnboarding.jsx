@@ -22,6 +22,12 @@ export default function CandidateOnboarding() {
   const missingFields = user?.missing_fields || [];
   const phoneRequired = missingFields.includes("phone");
   const nameRequired = missingFields.includes("full_name");
+  // Only show the skill picker if skills are actually missing — a
+  // candidate re-entering onboarding to fix something else (e.g. they just
+  // deleted their resume) shouldn't be shown an empty-looking skill picker
+  // that makes it look like their existing skills were wiped.
+  const skillsMissing = missingFields.includes("skills");
+  const totalSteps = skillsMissing ? 2 : 1;
 
   const [phone, setPhone] = useState(user?.phone || "");
   const [fullName, setFullName] = useState(user?.full_name || "");
@@ -33,13 +39,12 @@ export default function CandidateOnboarding() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const totalSteps = 2;
-
   useEffect(() => {
+    if (!skillsMissing) return;
     getSkillCatalog()
       .then(setSkillCatalog)
       .catch(() => setCatalogError("Couldn't load the skills list. Try refreshing."));
-  }, []);
+  }, [skillsMissing]);
 
   function toggleSkill(id) {
     setSelectedSkillIds((prev) =>
@@ -77,17 +82,15 @@ export default function CandidateOnboarding() {
     return true;
   }
 
-  // Sends only whatever the candidate actually provided this run. The
-  // backend's write serializer accepts partial data via PATCH, but
-  // onboarding always has at least a resume, skills, or a first-time
-  // phone/name once it gets here, so PUT-shaped (full submission) is fine
-  // for the common case; falling through to "nothing to send" only
-  // happens if nothing required was outstanding and both steps were
-  // skipped outright.
+  // Sends only whatever the candidate actually provided this run — skills
+  // is included only when this run's step 2 actually existed (skillsMissing),
+  // so an onboarding pass that's only here to fix the resume never touches
+  // the skills the candidate already has saved.
   async function submitProfile() {
     const hasPhoneUpdate = phoneRequired && phone.trim();
     const hasNameUpdate = nameRequired && fullName.trim();
-    if (!resumeFile && selectedSkillIds.length === 0 && !hasPhoneUpdate && !hasNameUpdate) {
+    const hasSkillsUpdate = skillsMissing && selectedSkillIds.length > 0;
+    if (!resumeFile && !hasSkillsUpdate && !hasPhoneUpdate && !hasNameUpdate) {
       navigate("/dashboard");
       return;
     }
@@ -97,7 +100,9 @@ export default function CandidateOnboarding() {
     try {
       const formData = new FormData();
       if (resumeFile) formData.append("cv", resumeFile);
-      selectedSkillIds.forEach((id) => formData.append("skills", id));
+      if (hasSkillsUpdate) {
+        selectedSkillIds.forEach((id) => formData.append("skills", id));
+      }
       if (hasPhoneUpdate) formData.append("phone", phone.trim());
       if (hasNameUpdate) formData.append("full_name", fullName.trim());
 
@@ -122,7 +127,11 @@ export default function CandidateOnboarding() {
       }
       if (!checkRequiredBeforeLeavingStep1()) return;
       setError("");
-      setStep(2);
+      if (step < totalSteps) {
+        setStep(2);
+      } else {
+        submitProfile();
+      }
       return;
     }
     setError("");
@@ -135,7 +144,11 @@ export default function CandidateOnboarding() {
       // same gate as Continue, minus the resume requirement.
       if (!checkRequiredBeforeLeavingStep1()) return;
       setError("");
-      setStep(2);
+      if (step < totalSteps) {
+        setStep(2);
+      } else {
+        submitProfile();
+      }
       return;
     }
     setError("");
@@ -226,7 +239,7 @@ export default function CandidateOnboarding() {
             </>
           )}
 
-          {step === 2 && (
+          {step === 2 && skillsMissing && (
             <>
               <h1 className="font-display text-xl font-bold text-ink mb-1">What are you looking for?</h1>
               <p className="text-sm text-slate mb-6">

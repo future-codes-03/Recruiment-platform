@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
 import Header from '../../components/candidate/Header'
-import { Card, ProgressBar, Badge, EmptyState } from '../../components/shared'
+import JobCard from '../../components/candidate/JobCard'
+import { Card, EmptyState, JobCardSkeleton } from '../../components/shared'
 import { listPublicJobs } from '../../api/jobs'
+import { getSkillCatalog } from '../../api/skills'
+
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest' },
+  { value: 'most_slots', label: 'Most slots open' },
+  { value: 'closest_to_filling', label: 'Closest to filling' },
+]
 
 // Public browsing — reachable without an account (GET /public/jobs is
 // unauthenticated per api_specification.yaml). Login is only required once
@@ -11,9 +18,23 @@ function JobsBrowse() {
   const [jobs, setJobs] = useState(null) // null = still loading
   const [error, setError] = useState('')
 
+  const [skillCatalog, setSkillCatalog] = useState([])
+  // Backend filters by name, not id (?skill=<name>, case-insensitive) — see
+  // PublicJobListView — so this holds a skill name, not a catalog id.
+  const [skillFilter, setSkillFilter] = useState('')
+  const [sortBy, setSortBy] = useState('newest')
+
+  useEffect(() => {
+    getSkillCatalog().then(setSkillCatalog).catch(() => {
+      // The filter just degrades to "All skills" only — not worth a
+      // separate error state for a non-critical control.
+    })
+  }, [])
+
   useEffect(() => {
     let cancelled = false
-    listPublicJobs()
+    setJobs(null)
+    listPublicJobs({ skill: skillFilter || undefined })
       .then((data) => {
         if (!cancelled) setJobs(data.results)
       })
@@ -23,7 +44,18 @@ function JobsBrowse() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [skillFilter])
+
+  // Sorts only the currently-loaded page — the API has no sort param, only
+  // a fixed newest-first order server-side. Fine at this scale; would need
+  // a real backend sort param if listings grow past a page or two.
+  const sortedJobs = useMemo(() => {
+    if (!jobs) return jobs
+    const withRemaining = jobs.map((j) => ({ ...j, _remaining: j.guaranteed_slots - j.slots_filled }))
+    if (sortBy === 'most_slots') return [...withRemaining].sort((a, b) => b._remaining - a._remaining)
+    if (sortBy === 'closest_to_filling') return [...withRemaining].sort((a, b) => a._remaining - b._remaining)
+    return withRemaining
+  }, [jobs, sortBy])
 
   return (
     <div className="min-h-screen bg-paper">
@@ -35,53 +67,54 @@ function JobsBrowse() {
           Clear the published skill bar first, and the interview slot is locked in for you.
         </p>
 
+        <div className="flex flex-wrap gap-3 mb-6">
+          <select
+            value={skillFilter}
+            onChange={(e) => setSkillFilter(e.target.value)}
+            className="border border-line rounded-lg px-3 py-2 text-sm bg-surface focus:outline-none focus:border-brass"
+          >
+            <option value="">All skills</option>
+            {skillCatalog.map((s) => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="border border-line rounded-lg px-3 py-2 text-sm bg-surface focus:outline-none focus:border-brass"
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
         {error && <Card className="mb-6 text-danger text-sm">{error}</Card>}
 
         {jobs === null && !error && (
-          <p className="text-sm text-slate">Loading open roles...</p>
+          <div className="flex flex-col gap-4">
+            <JobCardSkeleton />
+            <JobCardSkeleton />
+            <JobCardSkeleton />
+          </div>
         )}
 
         {jobs?.length === 0 && (
           <Card>
             <EmptyState
-              title="No open roles right now"
-              message="Check back soon — new guaranteed-slot roles are posted regularly."
+              title={skillFilter ? 'No roles match that skill' : 'No open roles right now'}
+              message={
+                skillFilter
+                  ? 'Try a different skill, or check back soon for new postings.'
+                  : 'Check back soon — new guaranteed-slot roles are posted regularly.'
+              }
             />
           </Card>
         )}
 
         <div className="flex flex-col gap-4">
-          {jobs?.map((job) => (
-            <Card key={job.id}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex-1">
-                  <h3 className="text-base font-bold text-ink mb-0.5">{job.title}</h3>
-                  {job.company_name && (
-                    <p className="text-xs text-slate mb-2">{job.company_name}</p>
-                  )}
-
-                  {job.skill_requirements?.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-3">
-                      {job.skill_requirements.map((s) => (
-                        <Badge key={s.skill_name}>{s.skill_name}</Badge>
-                      ))}
-                    </div>
-                  )}
-
-                  <ProgressBar value={job.slots_filled} max={job.guaranteed_slots} />
-                  <p className="text-xs text-slate mt-1.5">
-                    {job.guaranteed_slots - job.slots_filled} of {job.guaranteed_slots} guaranteed slots still open
-                  </p>
-                </div>
-                <Link
-                  to={`/jobs/${job.id}`}
-                  className="text-sm font-bold text-brass hover:underline whitespace-nowrap sm:self-start"
-                >
-                  View role
-                </Link>
-              </div>
-            </Card>
-          ))}
+          {sortedJobs?.map((job) => <JobCard key={job.id} job={job} />)}
         </div>
       </div>
     </div>

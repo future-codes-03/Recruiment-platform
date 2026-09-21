@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
+import { ToastProvider } from "./context/ToastContext";
 
 import LandingPage from "./pages/public/LandingPage";
 import AuthPage from "./pages/public/AuthPage";
@@ -38,129 +39,131 @@ function ComingSoon({ label }) {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<AuthPage />} />
-          <Route path="/signup" element={<AuthPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <ToastProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<AuthPage />} />
+            <Route path="/signup" element={<AuthPage />} />
+            <Route path="/verify-email" element={<VerifyEmailPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          <Route
-            path="/onboarding"
-            element={
-              <ProtectedRoute role="candidate">
-                <CandidateOnboarding />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute role="candidate">
-                <CandidateDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="/jobs" element={<JobsBrowse />} />
-          <Route path="/jobs/:id" element={<CandidateJobDetail />} />
-          <Route
-            path="/jobs/:id/assessment"
-            element={
-              <ProtectedRoute role="candidate">
-                <ComingSoon label="Assessment" />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/dashboard"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <EmployerDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/profile"
-            element={
-              <ProtectedRoute role="candidate">
-                <EditProfile />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/jobs/new"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <JobForm />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/jobs/:id/edit"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <JobForm />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/jobs/:id/ranked"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <JobRankedList />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/jobs/:id/settings"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <JobSettings />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/jobs/:id/candidates/:candidateId"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <CandidateDetail />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/jobs/:id"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <JobDetail />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/billing"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <Billing />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/employer/settings"
-            element={
-              <ProtectedRoute roles={["company_admin", "recruiter"]}>
-                <EmployerSettings />
-              </ProtectedRoute>
-            }
-          />
-          {/* Design reference only — not linked from the app, no real data,
+            <Route
+              path="/onboarding"
+              element={
+                <ProtectedRoute role="candidate">
+                  <CandidateOnboarding />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute role="candidate">
+                  <CandidateDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/jobs" element={<JobsBrowse />} />
+            <Route path="/jobs/:id" element={<CandidateJobDetail />} />
+            <Route
+              path="/jobs/:id/assessment"
+              element={
+                <ProtectedRoute role="candidate">
+                  <ComingSoon label="Assessment" />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/dashboard"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <EmployerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute role="candidate">
+                  <EditProfile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/jobs/new"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <JobForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/jobs/:id/edit"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <JobForm />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/jobs/:id/ranked"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <JobRankedList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/jobs/:id/settings"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <JobSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/jobs/:id/candidates/:candidateId"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <CandidateDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/jobs/:id"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <JobDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/billing"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <Billing />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/employer/settings"
+              element={
+                <ProtectedRoute roles={["company_admin", "recruiter"]}>
+                  <EmployerSettings />
+                </ProtectedRoute>
+              }
+            />
+            {/* Design reference only — not linked from the app, no real data,
               intentionally left unprotected so it's easy to pull up for a
               styling check without needing to be logged in as a company. */}
-          <Route path="/employer/styleguide" element={<StyleGuide />} />
+            <Route path="/employer/styleguide" element={<StyleGuide />} />
 
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }

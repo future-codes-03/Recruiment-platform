@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import { getMyProfile, patchMyProfile, deleteMyResume, deleteMyPhone } from "../../api/profile";
 import { getSkillCatalog } from "../../api/skills";
 import { getErrorMessage } from "../../api/errors";
@@ -11,11 +12,11 @@ import Card from "../../components/shared/Card";
 export default function EditProfile() {
   const navigate = useNavigate();
   const { user, setSession } = useAuth();
+  const { showToast } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -94,6 +95,7 @@ export default function EditProfile() {
       const profile = await deleteMyResume();
       applyProfile(profile);
       setConfirmingResumeDelete(false);
+      showToast("Resume removed.");
     } catch (err) {
       setError(getErrorMessage(err, "Couldn't remove your resume. Please try again."));
     } finally {
@@ -108,6 +110,7 @@ export default function EditProfile() {
       const profile = await deleteMyPhone();
       applyProfile(profile);
       setConfirmingPhoneDelete(false);
+      showToast("Phone number removed.");
     } catch (err) {
       setError(getErrorMessage(err, "Couldn't remove your phone number. Please try again."));
     } finally {
@@ -129,7 +132,6 @@ export default function EditProfile() {
 
     setSaving(true);
     setError("");
-    setSaved(false);
     try {
       const formData = new FormData();
       if (newResumeFile) formData.append("cv", newResumeFile);
@@ -151,7 +153,7 @@ export default function EditProfile() {
       setSelectedSkillIds(ids);
       setInitialSkillIds(ids);
       setNewResumeFile(null);
-      setSaved(true);
+      showToast("Profile updated.");
     } catch (err) {
       setError(getErrorMessage(err, "Couldn't save your changes. Please try again."));
     } finally {
@@ -346,9 +348,6 @@ export default function EditProfile() {
         </Card>
 
         {error && <p className="text-danger text-sm mb-4">{error}</p>}
-        {saved && !error && (
-          <p className="text-success text-sm mb-4">Profile updated.</p>
-        )}
 
         <div className="flex items-center justify-end gap-3">
           <Button variant="default" onClick={() => navigate("/dashboard")} disabled={saving}>
