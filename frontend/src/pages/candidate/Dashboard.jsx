@@ -47,21 +47,21 @@ function Dashboard() {
   }, [hasSkills])
 
   return (
-    <div className="min-h-screen bg-paper">
+    <div className="min-h-screen bg-landing-bg-alt font-body">
       <Header activeLink="Dashboard" />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10">
-        <h1 className="text-3xl font-bold text-ink mb-6">
+        <h1 className="font-landing-display text-3xl font-bold text-landing-text mb-6">
           Welcome{user?.full_name ? `, ${user.full_name.split(' ')[0]}` : ''}
         </h1>
 
         {profileIncomplete && (
-          <Card className="mb-8 flex flex-wrap items-center justify-between gap-4 bg-brass-light/50 border border-brass/30">
+          <Card className="mb-8 flex flex-wrap items-center justify-between gap-4 bg-landing-accent-bg border border-landing-accent/25">
             <div>
-              <p className="text-sm font-bold text-ink">Your profile is incomplete</p>
-              <p className="text-xs text-slate mt-0.5">Finish setting up your profile so employers have what they need and you don't miss a guaranteed slot.</p>
+              <p className="text-sm font-bold text-landing-text">Your profile is incomplete</p>
+              <p className="text-xs text-landing-muted mt-0.5">Finish setting up your profile so employers have what they need and you don't miss a guaranteed slot.</p>
             </div>
-            <Link to="/onboarding" className="text-sm font-bold text-brass-dark hover:underline whitespace-nowrap">
+            <Link to="/onboarding" className="text-sm font-bold text-landing-accent hover:underline whitespace-nowrap">
               Finish setup
             </Link>
           </Card>
@@ -70,10 +70,10 @@ function Dashboard() {
         {hasSkills && (
           <div className="mb-10">
             <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="text-lg font-bold text-ink">Matched to your skills</h2>
+              <h2 className="font-landing-display text-lg font-bold text-landing-text">Matched to your skills</h2>
             </div>
 
-            {matchedError && <Card className="mb-6 text-danger text-sm">{matchedError}</Card>}
+            {matchedError && <Card className="mb-6 bg-danger-bg text-danger text-sm">{matchedError}</Card>}
 
             {matchedJobs === null && !matchedError && (
               <div className="flex flex-col gap-4">
@@ -83,7 +83,7 @@ function Dashboard() {
             )}
 
             {matchedJobs?.length === 0 && (
-              <Card>
+              <Card className="bg-landing-bg border border-landing-border">
                 <EmptyState
                   title="No matches yet"
                   message="Nothing published right now matches your skills — check back soon, or browse everything below."
@@ -98,10 +98,10 @@ function Dashboard() {
         )}
 
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 className="text-lg font-bold text-ink">All open roles</h2>
+          <h2 className="font-landing-display text-lg font-bold text-landing-text">All open roles</h2>
         </div>
 
-        {error && <Card className="mb-6 text-danger text-sm">{error}</Card>}
+        {error && <Card className="mb-6 bg-danger-bg text-danger text-sm">{error}</Card>}
 
         {jobs === null && !error && (
           <div className="flex flex-col gap-4">
@@ -112,7 +112,7 @@ function Dashboard() {
         )}
 
         {jobs?.length === 0 && (
-          <Card>
+          <Card className="bg-landing-bg border border-landing-border">
             <EmptyState
               title="No open roles right now"
               message="Check back soon — new guaranteed-slot roles are posted regularly."

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
 import { verifyEmail, resendVerification } from "../../api/auth";
 import { getErrorMessage } from "../../api/errors";
-import Button from "../../components/shared/Button";
 
 // Two ways to land here:
 //  1. Right after signup, no ?token= yet — show "check your inbox" + resend.
@@ -63,45 +62,48 @@ export default function VerifyEmailPage() {
   }, [status, navigate]);
 
   return (
-    <div className="min-h-screen">
-      <header className="bg-ink text-white px-6 py-4">
-        <Link to="/" className="font-display font-bold text-lg">skillbridge</Link>
+    <div className="min-h-screen bg-landing-bg-alt font-body">
+      <header className="bg-landing-bg border-b border-landing-border-sub px-4 sm:px-6 py-4">
+        <Link to="/" className="text-lg font-bold tracking-tight">
+          <span className="text-landing-text">skill</span>
+          <span className="text-landing-accent">bridge</span>
+        </Link>
       </header>
 
       <main className="max-w-sm mx-auto px-6 py-16 text-center">
         {status === STATUS.PENDING && (
           <>
-            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-brass-light flex items-center justify-center text-2xl">
+            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-landing-accent-bg flex items-center justify-center text-2xl">
               ✉️
             </div>
-            <h1 className="font-display text-xl font-semibold mb-2">Check your inbox</h1>
-            <p className="text-sm text-slate mb-6">
+            <h1 className="font-landing-display text-xl font-semibold mb-2 text-landing-text">Check your inbox</h1>
+            <p className="text-sm text-landing-muted mb-6">
               We sent a verification link to{" "}
-              {emailFromQuery ? <span className="text-ink font-medium">{emailFromQuery}</span> : "your email"}.
+              {emailFromQuery ? <span className="text-landing-text font-medium">{emailFromQuery}</span> : "your email"}.
               Click it to activate your account.
             </p>
             {emailFromQuery && (
-              <Button
-                variant="default"
-                className="w-full"
+              <button
+                type="button"
                 disabled={resendState !== "idle"}
                 onClick={handleResend}
+                className="w-full py-2.5 rounded-xl text-sm font-medium border border-landing-border text-landing-text hover:bg-landing-bg transition-colors disabled:opacity-50"
               >
                 {resendState === "sending" && "Sending..."}
                 {resendState === "sent" && "Email sent — check your inbox"}
                 {resendState === "idle" && "Resend verification email"}
-              </Button>
+              </button>
             )}
           </>
         )}
 
         {status === STATUS.VERIFYING && (
           <>
-            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-line/40 flex items-center justify-center text-2xl animate-pulse">
+            <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-landing-border flex items-center justify-center text-2xl animate-pulse">
               ⏳
             </div>
-            <h1 className="font-display text-xl font-semibold mb-2">Verifying your email...</h1>
-            <p className="text-sm text-slate">This will just take a moment.</p>
+            <h1 className="font-landing-display text-xl font-semibold mb-2 text-landing-text">Verifying your email...</h1>
+            <p className="text-sm text-landing-muted">This will just take a moment.</p>
           </>
         )}
 
@@ -110,8 +112,8 @@ export default function VerifyEmailPage() {
             <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-success-bg flex items-center justify-center text-2xl">
               ✓
             </div>
-            <h1 className="font-display text-xl font-semibold mb-2 text-success">Email verified</h1>
-            <p className="text-sm text-slate">Taking you to login...</p>
+            <h1 className="font-landing-display text-xl font-semibold mb-2 text-success">Email verified</h1>
+            <p className="text-sm text-landing-muted">Taking you to login...</p>
           </>
         )}
 
@@ -120,21 +122,21 @@ export default function VerifyEmailPage() {
             <div className="w-14 h-14 mx-auto mb-5 rounded-full bg-danger-bg flex items-center justify-center text-2xl">
               ✕
             </div>
-            <h1 className="font-display text-xl font-semibold mb-2 text-danger">Verification failed</h1>
-            <p className="text-sm text-slate mb-6">{error}</p>
+            <h1 className="font-landing-display text-xl font-semibold mb-2 text-danger">Verification failed</h1>
+            <p className="text-sm text-landing-muted mb-6">{error}</p>
             {emailFromQuery && (
-              <Button
-                variant="primary"
-                className="w-full"
+              <button
+                type="button"
                 disabled={resendState !== "idle"}
                 onClick={handleResend}
+                className="w-full py-2.5 rounded-xl text-sm font-semibold bg-landing-text text-white hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {resendState === "sending" && "Sending..."}
                 {resendState === "sent" && "New link sent — check your inbox"}
                 {resendState === "idle" && "Send a new link"}
-              </Button>
+              </button>
             )}
-            <Link to="/login" className="block mt-4 text-sm text-slate hover:text-ink">
+            <Link to="/login" className="block mt-4 text-sm text-landing-muted hover:text-landing-text">
               Back to login
             </Link>
           </>

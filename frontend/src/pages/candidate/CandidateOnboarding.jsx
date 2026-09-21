@@ -4,7 +4,6 @@ import { useAuth } from "../../context/AuthContext";
 import { updateMyProfile } from "../../api/profile";
 import { getSkillCatalog } from "../../api/skills";
 import { getErrorMessage } from "../../api/errors";
-import Button from "../../components/shared/Button";
 import Card from "../../components/shared/Card";
 import ProgressBar from "../../components/shared/ProgressBar";
 
@@ -156,38 +155,38 @@ export default function CandidateOnboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-paper flex items-center justify-center px-4 sm:px-6 py-10">
+    <div className="min-h-screen bg-linear-to-br from-landing-bg-alt to-landing-card flex items-center justify-center px-4 sm:px-6 py-10 font-body">
       <div className="w-full max-w-lg">
-        <div className="flex items-center gap-2 font-display font-bold text-lg text-ink mb-8 justify-center">
-          <span className="w-6 h-6 rounded-md bg-brass inline-block" />
-          skillbridge
+        <div className="flex items-center justify-center gap-0 text-lg font-bold tracking-tight mb-8">
+          <span className="text-landing-text">skill</span>
+          <span className="text-landing-accent">bridge</span>
         </div>
 
         <ProgressBar value={step} max={totalSteps} label="Setting up your profile" showValue className="mb-6" />
 
-        <Card className="bg-surface">
+        <Card className="bg-landing-bg border border-landing-border">
           {step === 1 && (
             <>
-              <h1 className="font-display text-xl font-bold text-ink mb-1">
+              <h1 className="font-landing-display text-xl font-bold text-landing-text mb-1">
                 Welcome{user?.full_name ? `, ${user.full_name.split(" ")[0]}` : ""}.
               </h1>
-              <p className="text-sm text-slate mb-6">
+              <p className="text-sm text-landing-muted mb-6">
                 Upload your resume so employers can see who's behind each qualifying attempt.
               </p>
 
               <label
                 htmlFor="resume"
-                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-line rounded-xl py-10 px-6 cursor-pointer hover:border-brass hover:bg-brass-light/40 transition-colors text-center"
+                className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-landing-border rounded-xl py-10 px-6 cursor-pointer hover:border-landing-accent hover:bg-landing-accent-bg transition-colors text-center"
               >
-                <span className="w-10 h-10 rounded-full bg-card flex items-center justify-center text-brass-dark font-bold text-lg">
+                <span className="w-10 h-10 rounded-full bg-landing-bg-alt flex items-center justify-center text-landing-accent font-bold text-lg">
                   ↑
                 </span>
                 {resumeFile ? (
-                  <span className="text-sm font-semibold text-ink">{resumeFile.name}</span>
+                  <span className="text-sm font-semibold text-landing-text">{resumeFile.name}</span>
                 ) : (
                   <>
-                    <span className="text-sm font-semibold text-ink">Click to upload your resume</span>
-                    <span className="text-xs text-slate">PDF, up to 5MB</span>
+                    <span className="text-sm font-semibold text-landing-text">Click to upload your resume</span>
+                    <span className="text-xs text-landing-muted">PDF, up to 5MB</span>
                   </>
                 )}
                 <input
@@ -201,7 +200,7 @@ export default function CandidateOnboarding() {
 
               {nameRequired && (
                 <div className="mt-6">
-                  <label htmlFor="fullName" className="text-xs font-semibold text-slate uppercase tracking-wide block mb-1.5">
+                  <label htmlFor="fullName" className="text-xs font-semibold text-landing-muted uppercase tracking-wide block mb-1.5">
                     Full name
                   </label>
                   <input
@@ -210,16 +209,16 @@ export default function CandidateOnboarding() {
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. Ayesha Khan"
-                    className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-brass"
+                    className="w-full rounded-lg border border-landing-border px-3.5 py-2.5 text-sm text-landing-text focus:outline-none focus:border-landing-text"
                   />
-                  <p className="text-xs text-slate mt-1.5">
+                  <p className="text-xs text-landing-muted mt-1.5">
                     So employers know who they're talking to.
                   </p>
                 </div>
               )}
 
               <div className="mt-6">
-                <label htmlFor="phone" className="text-xs font-semibold text-slate uppercase tracking-wide block mb-1.5">
+                <label htmlFor="phone" className="text-xs font-semibold text-landing-muted uppercase tracking-wide block mb-1.5">
                   Phone number{phoneRequired ? "" : " (on file)"}
                 </label>
                 <input
@@ -228,10 +227,10 @@ export default function CandidateOnboarding() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="e.g. 03xx xxxxxxx"
-                  className="w-full rounded-lg border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-brass"
+                  className="w-full rounded-lg border border-landing-border px-3.5 py-2.5 text-sm text-landing-text focus:outline-none focus:border-landing-text"
                 />
                 {phoneRequired && (
-                  <p className="text-xs text-slate mt-1.5">
+                  <p className="text-xs text-landing-muted mt-1.5">
                     Needed so employers can reach you about an interview.
                   </p>
                 )}
@@ -241,8 +240,8 @@ export default function CandidateOnboarding() {
 
           {step === 2 && skillsMissing && (
             <>
-              <h1 className="font-display text-xl font-bold text-ink mb-1">What are you looking for?</h1>
-              <p className="text-sm text-slate mb-6">
+              <h1 className="font-landing-display text-xl font-bold text-landing-text mb-1">What are you looking for?</h1>
+              <p className="text-sm text-landing-muted mb-6">
                 Pick a few — this just shapes which guaranteed-slot roles we surface first.
               </p>
 
@@ -258,8 +257,8 @@ export default function CandidateOnboarding() {
                       onClick={() => toggleSkill(skill.id)}
                       className={`px-3.5 py-2 rounded-full text-sm font-medium border transition-colors ${
                         active
-                          ? "bg-ink text-white border-ink"
-                          : "bg-surface text-ink border-line hover:border-brass"
+                          ? "bg-landing-text text-white border-landing-text"
+                          : "bg-landing-bg text-landing-text border-landing-border hover:border-landing-accent"
                       }`}
                     >
                       {skill.name}
@@ -277,13 +276,18 @@ export default function CandidateOnboarding() {
               type="button"
               onClick={handleSkip}
               disabled={submitting}
-              className="text-sm font-medium text-slate hover:text-ink disabled:opacity-50"
+              className="text-sm font-medium text-landing-muted hover:text-landing-text disabled:opacity-50"
             >
               Skip for now
             </button>
-            <Button variant="primary" className="rounded-full" onClick={handleContinue} disabled={submitting}>
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={submitting}
+              className="px-5 py-2.5 rounded-full text-sm font-semibold bg-landing-text text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
               {submitting ? "Saving..." : step < totalSteps ? "Continue" : "Go to dashboard"}
-            </Button>
+            </button>
           </div>
         </Card>
       </div>

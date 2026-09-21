@@ -37,6 +37,31 @@
 
   --tracking-widelabel: 0.08em;
   --radius-xl: 10px;
+
+  /*
+    Landing-page-only palette and display font — matches the public
+    marketing site's Figma redesign, which intentionally departs from the
+    ink/brass brand system used everywhere else in the app. Scoped by the
+    "landing-" prefix so it never leaks into employer/candidate screens.
+  */
+  --color-landing-bg: #ffffff;
+  --color-landing-bg-alt: #f4f6f9;
+  --color-landing-card: #eaeff6;
+  --color-landing-border: #dde3ec;
+  --color-landing-border-sub: #f0f2f5;
+  --color-landing-text: #1a1a2e;
+  --color-landing-muted: #6b7280;
+  --color-landing-dim: #2c2f3a;
+  --color-landing-accent: #c94b2e;
+  --color-landing-accent-dark: #a53c22;
+  --color-landing-accent-bg: #f5ede9;
+
+  /* Dark surfaces on the landing page (footer, "for employers" panel) —
+     landing-text doubles as the dark background, landing-dim as the
+     hairline border on top of it. */
+  --color-landing-dark-muted: #9ca3af;
+
+  --font-landing-display: 'Playfair Display', Georgia, serif;
 }
 
 html {
