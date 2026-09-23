@@ -46,11 +46,11 @@
     Warm cream/sage palette, extended site-wide from the hero section's
     reference mockup so every section reads as one consistent theme.
   */
-  --color-landing-bg: #fffdf9;
-  --color-landing-bg-alt: #f3ecdc;
-  --color-landing-card: #f8f0de;
-  --color-landing-border: #e6dcc7;
-  --color-landing-border-sub: #f1ebdd;
+  --color-landing-bg: #fffefc;
+  --color-landing-bg-alt: #f9f3e6;
+  --color-landing-card: #fdf9ef;
+  --color-landing-border: #ece2cd;
+  --color-landing-border-sub: #f4efe1;
   --color-landing-text: #1f2a23;
   --color-landing-muted: #6f6a5c;
   --color-landing-dim: #333c34;
