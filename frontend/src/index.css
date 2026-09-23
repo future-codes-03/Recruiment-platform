@@ -43,23 +43,42 @@
     marketing site's Figma redesign, which intentionally departs from the
     ink/brass brand system used everywhere else in the app. Scoped by the
     "landing-" prefix so it never leaks into employer/candidate screens.
+    Warm cream/sage palette, extended site-wide from the hero section's
+    reference mockup so every section reads as one consistent theme.
   */
-  --color-landing-bg: #ffffff;
-  --color-landing-bg-alt: #f4f6f9;
-  --color-landing-card: #eaeff6;
-  --color-landing-border: #dde3ec;
-  --color-landing-border-sub: #f0f2f5;
-  --color-landing-text: #1a1a2e;
-  --color-landing-muted: #6b7280;
-  --color-landing-dim: #2c2f3a;
+  --color-landing-bg: #fffdf9;
+  --color-landing-bg-alt: #f3ecdc;
+  --color-landing-card: #f8f0de;
+  --color-landing-border: #e6dcc7;
+  --color-landing-border-sub: #f1ebdd;
+  --color-landing-text: #1f2a23;
+  --color-landing-muted: #6f6a5c;
+  --color-landing-dim: #333c34;
   --color-landing-accent: #c94b2e;
   --color-landing-accent-dark: #a53c22;
-  --color-landing-accent-bg: #f5ede9;
+  --color-landing-accent-bg: #f6ece2;
+
+  /* Hero-only warm-to-sage gradient and its matching card/CTA/pill colors —
+     scoped to the hero section per the updated Figma reference. The base
+     landing-* tokens above now share its warm palette, but the hero keeps
+     its own gradient/card/CTA/pill values since they were sampled exactly
+     from the reference mockup, and other sections reuse them where a CTA
+     or pill should match the hero 1:1. */
+  --color-landing-hero-from: #f9ecdc;
+  --color-landing-hero-via: #fffaf0;
+  --color-landing-hero-to: #e7f3ea;
+  --color-landing-hero-card: #fefaf1;
+  --color-landing-hero-cta: #263f34;
+  --color-landing-hero-cta-hover: #1b2e26;
+  --color-landing-hero-pill-bg: #e8f2ea;
+  --color-landing-hero-pill-text: #336448;
+  --color-landing-hero-progress: #d1682d;
+  --color-landing-hero-progress-track: #ede4d5;
 
   /* Dark surfaces on the landing page (footer, "for employers" panel) —
      landing-text doubles as the dark background, landing-dim as the
      hairline border on top of it. */
-  --color-landing-dark-muted: #9ca3af;
+  --color-landing-dark-muted: #a8a290;
 
   --font-landing-display: 'Playfair Display', Georgia, serif;
 }

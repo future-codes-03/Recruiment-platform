@@ -132,19 +132,19 @@ function FooterLink({ label, to }) {
 
 function InterviewCard() {
   return (
-    <div className="rounded-2xl p-8 shadow-lg bg-landing-card border border-landing-border min-w-70 sm:min-w-80">
+    <div className="rounded-2xl p-8 shadow-lg bg-landing-hero-card border border-landing-border min-w-70 sm:min-w-80">
       <p className="text-sm text-landing-muted">Data Analyst Intern · [Company]</p>
       <h3 className="text-xl font-semibold mt-2 mb-1 text-landing-text">Your interview path</h3>
       <p className="text-sm mb-4 text-landing-muted">4 of 8 interview slots are available</p>
-      <div className="relative h-2 rounded-full mb-3 bg-landing-border">
-        <div className="absolute inset-y-0 left-0 rounded-full bg-landing-accent" style={{ width: "60%" }} />
+      <div className="relative h-2 rounded-full mb-3 bg-landing-hero-progress-track">
+        <div className="absolute inset-y-0 left-0 rounded-full bg-landing-hero-progress" style={{ width: "60%" }} />
       </div>
       <p className="text-sm mb-5 text-landing-muted">The assessment checks 3 skills</p>
       <div className="flex flex-wrap gap-2">
         {["Excel ≥ 65%", "SQL ≥ 65%", "Data analysis ≥ 60%"].map((skill) => (
           <span
             key={skill}
-            className="px-3 py-1 rounded-lg text-sm font-medium bg-landing-bg border border-landing-border text-landing-dim"
+            className="px-3 py-1 rounded-full text-sm font-medium bg-landing-hero-pill-bg text-landing-hero-pill-text"
           >
             {skill}
           </span>
@@ -259,7 +259,7 @@ export default function LandingPage() {
       </header>
 
       {/* ── Hero ── */}
-      <section className="bg-linear-to-br from-landing-bg-alt to-landing-card">
+      <section className="bg-linear-to-r from-landing-hero-from via-landing-hero-via to-landing-hero-to">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20 lg:py-28 grid lg:grid-cols-2 gap-12 items-center">
           <div>
             <p className="flex items-center gap-2 text-sm font-medium mb-6 text-landing-accent">
@@ -274,7 +274,7 @@ export default function LandingPage() {
             </p>
             <Link
               to="/jobs"
-              className="inline-flex items-center gap-2 px-7 py-4 rounded-xl text-base font-semibold transition-opacity hover:opacity-90 bg-landing-text text-landing-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-accent"
+              className="inline-flex items-center gap-2 px-7 py-4 rounded-xl text-base font-semibold text-white transition-colors hover:bg-landing-hero-cta-hover bg-landing-hero-cta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-accent"
             >
               Browse opportunities →
             </Link>
@@ -327,7 +327,7 @@ export default function LandingPage() {
               <Link
                 key={title}
                 to="/jobs"
-                className="rounded-2xl p-7 flex flex-col gap-5 transition-shadow hover:shadow-xl bg-landing-card border border-landing-border"
+                className="group rounded-2xl p-7 flex flex-col gap-5 transition-shadow hover:shadow-xl bg-landing-card border border-landing-border"
               >
                 <div>
                   <p className="text-xs font-medium mb-1 text-landing-accent">{company}</p>
@@ -340,13 +340,16 @@ export default function LandingPage() {
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {skills.map((s) => (
-                      <span key={s} className="px-2.5 py-1 rounded-md text-xs font-medium bg-landing-border/60 text-landing-dim">
+                      <span
+                        key={s}
+                        className="px-2.5 py-1 rounded-full text-xs font-medium bg-landing-hero-pill-bg text-landing-hero-pill-text"
+                      >
                         {s}
                       </span>
                     ))}
                   </div>
                 </div>
-                <span className="mt-auto text-sm font-semibold py-2.5 rounded-lg text-center bg-landing-text text-landing-bg">
+                <span className="mt-auto text-sm font-semibold py-2.5 rounded-lg text-center text-white transition-colors bg-landing-hero-cta group-hover:bg-landing-hero-cta-hover">
                   View assessment →
                 </span>
               </Link>
@@ -459,7 +462,7 @@ export default function LandingPage() {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               to="/jobs"
-              className="px-7 py-4 rounded-xl text-sm font-semibold transition-opacity hover:opacity-90 bg-landing-text text-landing-bg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-accent"
+              className="px-7 py-4 rounded-xl text-sm font-semibold text-white transition-colors hover:bg-landing-hero-cta-hover bg-landing-hero-cta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-landing-accent"
             >
               Browse opportunities →
             </Link>
